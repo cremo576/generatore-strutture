@@ -15,20 +15,13 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 Write-Output "Git status prima delle modifiche:"
 git status
 
+# Aggiungo un messaggio di commit predefinito per automatizzare il processo
+$commitMsg = "Aggiornamento automatico delle modifiche"  # Messaggio predefinito
+
 # Aggiunge tutti i file modificati
 git add .
 
-# Se non ci sono cambi da commit, informa e termina
-$diff = git status --porcelain
-if (-not $diff) {
-  Write-Output "Nessuna modifica da pushare."
-  exit 0
-}
-
-# Commit (modifica il testo del commit se vuoi)
-$commitMsg = Read-Host "Messaggio di commit (premi Invio per usare 'Aggiornamento da local')"
-if (-not $commitMsg) { $commitMsg = "Aggiornamento da local" }
-
+# Commit automatico con il messaggio predefinito
 git commit -m "$commitMsg"
 
 # Verifica remote
@@ -39,8 +32,7 @@ Write-Output "Remote configurati:`n$remote"
 Write-Output "Eseguo git push origin master..."
 try {
   git push origin master
-  Write-Output "Push completato. Controlla la pagina GitHub per il deploy su Cloudflare Pages."
+  Write-Output "Push completato con successo!"
 } catch {
   Write-Error "Errore durante il push: $_.Exception.Message"
-  Write-Output "Se il repository remoto non è impostato, aggiungilo con: git remote add origin https://github.com/TUO-USERNAME/NOME-REPO.git"
 }
