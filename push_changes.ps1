@@ -3,7 +3,7 @@
 # Apri PowerShell come utente e lancia: .\push_changes.ps1
 
 # Vai nella cartella del progetto
-Set-Location -Path "E:\Generatore_Strutture"
+Set-Location -Path "D:\Generatore_Strutture\sito"
 
 # Controllo se git è disponibile
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
