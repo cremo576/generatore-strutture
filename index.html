@@ -856,6 +856,17 @@ try {
     }
   } catch (e) {}
 }
+
+// Definizione di base per STRUCTURE_TEMPLATES
+const STRUCTURE_TEMPLATES = {
+  pump_noinv: [
+    { suffix: '_tag1', type: 'INT', access: 'RW', comment: 'Tag 1' },
+    { suffix: '_tag2', type: 'FLOAT', access: 'R', comment: 'Tag 2' }
+  ],
+  valve_noinv: [
+    { suffix: '_valve1', type: 'BOOL', access: 'RW', comment: 'Valve 1' }
+  ]
+};
   </script>
 </body>
 </html>
