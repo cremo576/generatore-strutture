@@ -55,6 +55,21 @@ window.addEventListener('unhandledrejection', (ev) => {
   }
 });
 
+// Definizione della funzione showMessage per mostrare messaggi nella console o nell'interfaccia utente
+function showMessage(message, type = 'info') {
+  console.log(`[${type.toUpperCase()}] ${message}`);
+}
+
+// Definizione della funzione computeHeaderMap per calcolare la mappa degli header
+function computeHeaderMap(headers) {
+  const map = {};
+  headers.forEach((header, index) => {
+    const key = header.toLowerCase().replace(/\s+/g, '');
+    map[key] = index;
+  });
+  return map;
+}
+
 const PumpStructureGenerator = () => {
   const [loggedIn, setLoggedIn] = useState(false);
   const [username, setUsername] = useState('admin');
@@ -218,7 +233,7 @@ const PumpStructureGenerator = () => {
   };
 
   // Costruisce sia la struttura flat (array di oggetti) che le righe AoA da inserire nel template,
-  // a partire dalle pompe fornite (array di { id, nome, indirizzo }).
+  // a partire dalle pompe fornite (array di { id, nome, indirizzo }). 
   // Questa versione segue rigidamente l'ordine e il numero di campi definiti in STRUCTURE_TEMPLATES
   // per la combinazione device+inverter scelta, calcola gli indirizzi con `addressFromSequence`
   // e mappa i campi nelle colonne del template (se presenti) o nei default headers.
@@ -348,30 +363,22 @@ const PumpStructureGenerator = () => {
         try {
           const baseAOA = (templateAOA || []).map(r => Array.isArray(r) ? r.slice() : []);
           const insertAt = 2; // inserisci a partire dalla riga 3
-          const safeInsertAt = Math.min(insertAt, baseAOA.length);
 
-          // conta le righe non vuote esistenti nel blocco template a partire da safeInsertAt
-          let existingTemplateRowsCount = 0;
-          for (let i = safeInsertAt; i < baseAOA.length; i++) {
-            const r = baseAOA[i] || [];
-            const allEmpty = (!r || r.length === 0) || r.every(cell => cell === undefined || String(cell).trim() === '');
-            if (allEmpty) break;
-            existingTemplateRowsCount++;
-          }
+          // Inserisci le righe generate nel template
+          aoa.forEach((row, idx) => {
+            baseAOA[insertAt + idx] = row;
+          });
 
-          const prefix = baseAOA.slice(0, safeInsertAt);
-          const suffix = baseAOA.slice(safeInsertAt + existingTemplateRowsCount);
-          const newAOA = prefix.concat(aoa, suffix);
+          // Scrivi il file Excel aggiornato
+          const workbook = XLSX.utils.book_new();
+          const worksheet = XLSX.utils.aoa_to_sheet(baseAOA);
+          XLSX.utils.book_append_sheet(workbook, worksheet, 'Template');
+          XLSX.writeFile(workbook, 'template_excel.xlsx');
 
-          setTemplateAOA(newAOA);
-          // aggiorna templateRows con il blocco appena incollato
-          setTemplateRows(aoa.slice());
-
-          showMessage(`Righe incollate nel template in memoria (${flat.length} righe). Usa Esporta per scaricare il file.`, 'success', 5000);
-          console.log('[GENERATE] templateAOA updated in memory. new rows:', aoa.length, 'existingBlockReplaced:', existingTemplateRowsCount);
-        } catch (errInner) {
-          console.error('Errore durante l\'incollamento delle righe nel template in memoria:', errInner);
-          showMessage('Generazione completata ma non è stato possibile incollare nel template in memoria. Controlla la console.', 'warning');
+          showMessage('Struttura copiata nel template con successo!', 'success');
+        } catch (err) {
+          console.error('Errore durante l\'inserimento nel template:', err);
+          showMessage('Errore durante l\'inserimento nel template.', 'error');
         }
       } else {
         showMessage(`Generata struttura per ${pumps.length} pompe (${flat.length} righe totali). Anteprima pronta.`, 'success', 4000);
