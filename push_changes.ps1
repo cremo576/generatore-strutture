@@ -35,10 +35,10 @@ git commit -m "$commitMsg"
 $remote = git remote -v
 Write-Output "Remote configurati:`n$remote"
 
-# Push sul branch main (cambia branch se usi altro)
-Write-Output "Eseguo git push origin main..."
+# Push sul branch master (cambia branch se usi altro)
+Write-Output "Eseguo git push origin master..."
 try {
-  git push origin main
+  git push origin master
   Write-Output "Push completato. Controlla la pagina GitHub per il deploy su Cloudflare Pages."
 } catch {
   Write-Error "Errore durante il push: $_.Exception.Message"
