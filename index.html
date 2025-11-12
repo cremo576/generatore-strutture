@@ -867,6 +867,13 @@ const STRUCTURE_TEMPLATES = {
     { suffix: '_valve1', type: 'BOOL', access: 'RW', comment: 'Valve 1' }
   ]
 };
+
+// Definizione di base per addressFromSequence
+function addressFromSequence(baseAddress, seqKey, index) {
+  // Calcola un indirizzo incrementale basato su un valore di base e un indice
+  const base = parseInt(baseAddress, 10) || 0;
+  return base + index;
+}
   </script>
 </body>
 </html>
