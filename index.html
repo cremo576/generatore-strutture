@@ -1,0 +1,854 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Generatore Pompe - Test</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/lucide@0.294.0/dist/umd/lucide.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+// inlined app.js (clean, unescaped)
+const { useState, useEffect } = React;
+// Correggiamo l'uso delle icone Lucide
+const { createIcons, icons } = lucide;
+// Inizializziamo le icone
+createIcons();
+
+// Global error handlers to surface runtime errors (helps debugging "pagina bianca")
+window.addEventListener('error', (e) => {
+  console.error('Runtime error catturato:', e.error || e.message, e);
+  try {
+    // preferiamo mostrare il messaggio nell'interfaccia se l'app è montata
+    const msg = 'Errore runtime: ' + (e.error && e.error.message ? e.error.message : e.message);
+    try {
+      if (window && typeof window.showMessage === 'function') {
+        window.showMessage(msg, 'error');
+      } else {
+        console.error(msg);
+      }
+    } catch (err) {
+      console.error(msg);
+    }
+  } catch (err) {
+    // ignore
+  }
+});
+window.addEventListener('unhandledrejection', (ev) => {
+  console.error('Unhandled promise rejection:', ev.reason);
+  try {
+    const msg = 'Unhandled promise rejection: ' + (ev.reason && ev.reason.message ? ev.reason.message : String(ev.reason));
+    if (window && typeof window.showMessage === 'function') {
+      window.showMessage(msg, 'error');
+    } else {
+      console.error(msg);
+    }
+  } catch (err) {
+    console.error(ev.reason);
+  }
+});
+
+const PumpStructureGenerator = () => {
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [username, setUsername] = useState('admin');
+  const [password, setPassword] = useState('');
+  const [componentType, setComponentType] = useState('pump');
+  const [hasInverter, setHasInverter] = useState(false);
+  const [tableData, setTableData] = useState('');
+  const [structure, setStructure] = useState([]);
+  const [templateHeader, setTemplateHeader] = useState(null);
+  const [templateRows, setTemplateRows] = useState(null);
+  const [templateFilename, setTemplateFilename] = useState(null);
+  const [templateValid, setTemplateValid] = useState(true);
+  const [templateIssues, setTemplateIssues] = useState([]);
+  const [templateAOA, setTemplateAOA] = useState(null);
+  const [templateHeaderMap, setTemplateHeaderMap] = useState(null);
+  const [previewRows, setPreviewRows] = useState([]);
+  const [importedRows, setImportedRows] = useState([]);
+  const [exportFilename, setExportFilename] = useState('Struttura');
+  const [exportFilenameEdited, setExportFilenameEdited] = useState(false);
+  const [globalMessage, setGlobalMessage] = useState(null);
+  const [dropActive, setDropActive] = useState(false);
+
+  // Messaggistica inline (sostituisce tutti gli alert/prompt)
+  const showMessage = (text, type = 'info', ttl = 6000) => {
+    const payload = { text: String(text || ''), type };
+    setGlobalMessage(payload);
+    // Also make it available globally for code outside React
+    try {
+      window.latestAppMessage = payload;
+      window.showMessage = (t, ty) => window.dispatchEvent(new CustomEvent('app-message', { detail: { text: t, type: ty || 'info' } }));
+    } catch (e) {}
+    if (ttl > 0) setTimeout(() => setGlobalMessage(null), ttl);
+  };
+
+  // Funzione per caricare il template (prova percorsi alternativi e log chiari)
+  const tryLoadTemplate = async () => {
+    const NAME = 'template_excel.xlsx';
+    // prova una lista di possibili URL (relative e assolute)
+    const candidatePaths = [
+      NAME,
+      './' + NAME,
+      '/' + NAME,
+      (window && window.location ? window.location.origin + '/' + NAME : NAME)
+    ];
+
+    let lastError = null;
+    for (const p of candidatePaths) {
+      try {
+        console.log('[TEMPLATE] Trying fetch:', p);
+        const res = await fetch(p, { cache: 'no-store' });
+        if (!res.ok) {
+          console.warn('[TEMPLATE] fetch failed for', p, 'status', res.status);
+          lastError = new Error(`Fetch ${p} failed: ${res.status}`);
+          continue;
+        }
+        const ab = await res.arrayBuffer();
+        const wb = XLSX.read(ab, { type: 'array' });
+        const first = wb.Sheets[wb.SheetNames[0]];
+        const aoa = XLSX.utils.sheet_to_json(first, { header: 1, raw: false });
+        if (!aoa || aoa.length === 0) {
+          lastError = new Error('Template caricato ma vuoto: ' + p);
+          continue;
+        }
+
+        const header = aoa[0].map(h => (h === undefined ? '' : String(h)));
+        setTemplateHeader(header);
+        try {
+          setTemplateHeaderMap(computeHeaderMap(header));
+        } catch (e) { setTemplateHeaderMap(null); }
+
+        const aoaNormalized = aoa.map(r => (r || []).map(c => (c === undefined ? '' : String(c))));
+        setTemplateAOA(aoaNormalized);
+
+        // trova blocco template
+        const rows = [];
+        for (let i = 1; i < aoaNormalized.length; i++) {
+          const r = aoaNormalized[i];
+          const allEmpty = (!r || r.length === 0) || r.every(cell => cell === undefined || String(cell).trim() === '');
+          if (allEmpty) break;
+          rows.push(r.map(c => (c === undefined ? '' : String(c))));
+        }
+        if (rows.length > 0) setTemplateRows(rows);
+
+        setTemplateFilename(p);
+
+        // validation
+        const required = [
+          'Tag Name','Data type','Address PLC','ACCESSO','Comment','Stato','RaW min','RaW maX','Unità di misura','Scala min','Scala maX','Modifiche'
+        ];
+        const normalize = (s) => String(s || '').normalize('NFD').replace(/\u0300-\u036f/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g,'');
+        const hdrNorm = header.map(h => normalize(h));
+        const missing = [];
+        required.forEach(r => { if (!hdrNorm.some(hn => hn === normalize(r))) missing.push(r); });
+        setTemplateValid(missing.length === 0);
+        setTemplateIssues(missing);
+
+        console.log('[TEMPLATE] Caricato con successo da', p, { header, rowsCount: rows.length, missing });
+        showMessage(`Template caricato automaticamente da ${p} (${rows.length} righe).`, missing.length === 0 ? 'success' : 'warning', 5000);
+        return; // successo, non provare altri paths
+      } catch (err) {
+        console.warn('[TEMPLATE] errore caricamento', p, err);
+        lastError = err;
+        continue;
+      }
+    }
+
+    // se arrivo qui significa che tutti i tentativi sono falliti
+    console.warn('[TEMPLATE] impossibile caricare automaticamente il template. Ultimo errore:', lastError);
+    showMessage(`Impossibile caricare automaticamente ${NAME}. Controlla che il file sia nella root del sito e che il nome sia esatto. Se non vuoi pubblicarlo, caricalo manualmente con il controllo sottostante.`, 'warning', 12000);
+  };
+  
+  const handleLogin = (e) => {
+    e.preventDefault();
+    if (username === 'admin' && password === 'jonni') {
+      setLoggedIn(true);
+    } else {
+      showMessage('Credenziali non valide. Riprova.', 'error');
+    }
+  };
+
+  // Reset completo degli stati e pulizia delle risorse al logout
+  const handleLogout = () => {
+    try {
+      // reset React state
+      setLoggedIn(false);
+      setUsername('admin');
+      setPassword('');
+      setComponentType('pump');
+      setHasInverter(false);
+      setTableData('');
+      setStructure([]);
+      setTemplateHeader(null);
+      setTemplateRows(null);
+      setExportFilename('Struttura');
+      setExportFilenameEdited(false);
+      setGlobalMessage(null);
+      setDropActive(false);
+
+      // pulisci l'input file se presente
+      try {
+        const inp = document.getElementById('excelFile');
+        if (inp) inp.value = '';
+      } catch (e) {
+        console.warn('Impossibile resettare l\'input file:', e);
+      }
+
+      // rimuovi eventuali riferimenti globali usati per i messaggi
+      try {
+        if (window) {
+          window.latestAppMessage = null;
+          try { delete window.showMessage; } catch(e) { window.showMessage = undefined; }
+        }
+      } catch (e) {}
+
+      console.log('Logout: stato dell\'app ripristinato alle impostazioni iniziali.');
+    } catch (err) {
+      console.error('Errore durante il logout/reset:', err);
+      // almeno forziamo il logout
+      setLoggedIn(false);
+    }
+  };
+
+  // Costruisce sia la struttura flat (array di oggetti) che le righe AoA da inserire nel template,
+  // a partire dalle pompe fornite (array di { id, nome, indirizzo }).
+  // Questa versione segue rigidamente l'ordine e il numero di campi definiti in STRUCTURE_TEMPLATES
+  // per la combinazione device+inverter scelta, calcola gli indirizzi con `addressFromSequence`
+  // e mappa i campi nelle colonne del template (se presenti) o nei default headers.
+  const buildGeneratedFromPumps = (pumps) => {
+    if (!pumps || !pumps.length) return { flat: [], aoa: [] };
+
+    const headers = templateHeader && templateHeader.length ? templateHeader : [
+      'Tag Name', 'Data type', 'Address PLC', 'ACCESSO', 'Comment', 'Stato', 'RaW min', 'RaW maX', 'Unità di misura', 'Scala min', 'Scala maX', 'Modifiche'
+    ];
+    // Use header map if available for robust column indices
+    const headerMap = templateHeaderMap || computeHeaderMap(headers);
+    const tagIndex = headerMap.tagIndex >= 0 ? headerMap.tagIndex : 0;
+    const addrIndex = headerMap.addrIndex >= 0 ? headerMap.addrIndex : 2;
+    const dataTypeIdx = headerMap.dataTypeIdx >= 0 ? headerMap.dataTypeIdx : 1;
+    const accessIdx = headerMap.accessIdx >= 0 ? headerMap.accessIdx : 3;
+    const commentIdx = headerMap.commentIdx >= 0 ? headerMap.commentIdx : 4;
+
+    const flat = [];
+    const aoa = [];
+
+    const seqKey = `${componentType === 'pump' ? 'pump' : 'valve'}_${hasInverter ? 'inv' : 'noinv'}`;
+    const tmpl = STRUCTURE_TEMPLATES[seqKey] || [];
+
+    // rows per pump = number of template fields for this device type
+    const rowsPerPump = tmpl.length;
+
+    pumps.forEach((p, pIdx) => {
+      const pumpName = (p.nome || p.name || '').toString();
+      const baseRaw = p.indirizzo || p.address || '';
+
+      for (let i = 0; i < rowsPerPump; i++) {
+        const tmeta = tmpl[i] || {};
+
+        // costruisci nome tag usando suffisso del template
+        const tagName = `${pumpName}${tmeta.suffix || `_r${i}`}`;
+
+        // calcola address usando la sequenza definita (addressFromSequence)
+        const addr = addressFromSequence(baseRaw, seqKey, i) || computeAddress(baseRaw, i, 0);
+
+        const flatItem = {
+          name: tagName,
+          type: tmeta.type || '',
+          address: addr,
+          access: tmeta.access || '',
+          comment: tmeta.comment || '',
+          stato: '',
+        };
+
+        if (tmeta.rawMin !== undefined) {
+          flatItem.rawMin = tmeta.rawMin;
+          flatItem.rawMax = tmeta.rawMax;
+          flatItem.unit = tmeta.unit;
+          flatItem.scalaMin = tmeta.scalaMin;
+          flatItem.scalaMax = tmeta.scalaMax;
+        }
+
+        flat.push(flatItem);
+
+        // mappa nelle colonne header
+        const row = new Array(headers.length).fill('');
+        row[tagIndex] = flatItem.name || '';
+        row[dataTypeIdx] = flatItem.type || '';
+        row[addrIndex] = flatItem.address || '';
+        row[accessIdx] = flatItem.access || '';
+        row[commentIdx] = flatItem.comment || '';
+
+        const statoIdx = headers.findIndex(h => /stato/i.test(String(h)));
+        const rawMinIdx = headers.findIndex(h => /raW min/i.test(String(h)) || /raw min/i.test(String(h)));
+        const rawMaxIdx = headers.findIndex(h => /raW maX/i.test(String(h)) || /raw ma/i.test(String(h)));
+        const unitIdx = headers.findIndex(h => /unit/i.test(String(h)));
+        const scalaMinIdx = headers.findIndex(h => /scala min/i.test(String(h)));
+        const scalaMaxIdx = headers.findIndex(h => /scala ma/i.test(String(h)));
+
+        if (statoIdx >= 0) row[statoIdx] = flatItem.stato || '';
+        if (rawMinIdx >= 0) row[rawMinIdx] = flatItem.rawMin !== undefined ? flatItem.rawMin : '';
+        if (rawMaxIdx >= 0) row[rawMaxIdx] = flatItem.rawMax !== undefined ? flatItem.rawMax : '';
+        if (unitIdx >= 0) row[unitIdx] = flatItem.unit || '';
+        if (scalaMinIdx >= 0) row[scalaMinIdx] = flatItem.scalaMin !== undefined ? flatItem.scalaMin : '';
+        if (scalaMaxIdx >= 0) row[scalaMaxIdx] = flatItem.scalaMax !== undefined ? flatItem.scalaMax : '';
+
+        aoa.push(row);
+      }
+
+      // separazione tra pompe (3 righe vuote)
+      if (pIdx < pumps.length - 1) {
+        aoa.push(new Array(headers.length).fill(''));
+        aoa.push(new Array(headers.length).fill(''));
+        aoa.push(new Array(headers.length).fill(''));
+      }
+    });
+
+    return { flat, aoa };
+  };
+
+  const handleGenerate = () => {
+    // Preferisci usare i dati importati strutturati se presenti; altrimenti prova a parsare la textarea
+    let pumps = [];
+    if (importedRows && importedRows.length) {
+      pumps = importedRows;
+    } else if (tableData && tableData.trim()) {
+      // parse tableData nello stesso formato usato dal reader
+      const sections = tableData.split('---').filter(section => section.trim());
+      sections.forEach((section, idx) => {
+        const lines = section.split('\n').map(l => l.trim()).filter(Boolean);
+        const p = { id: idx + 1, nome: '', indirizzo: '' };
+        lines.forEach(line => {
+          if (line.includes('Nome:')) p.nome = line.split('Nome:')[1].trim();
+          if (line.includes('Indirizzo:')) p.indirizzo = line.split('Indirizzo:')[1].trim();
+        });
+        if (p.nome && p.indirizzo) pumps.push(p);
+      });
+    }
+
+    if (!pumps.length) {
+      showMessage('Nessun dato disponibile per generare la struttura. Importa o incolla i dati prima di procedere.', 'warning');
+      return;
+    }
+
+    try {
+      const { flat, aoa } = buildGeneratedFromPumps(pumps);
+      setStructure(flat);
+      setPreviewRows(aoa);
+      console.log('[GENERATE] flat length:', flat.length, 'aoa rows:', aoa.length);
+
+      // Se abbiamo un template caricato in memoria, incolla le righe generate nel template
+      if (templateAOA && templateHeader && templateHeader.length) {
+        try {
+          const baseAOA = (templateAOA || []).map(r => Array.isArray(r) ? r.slice() : []);
+          const insertAt = 2; // inserisci a partire dalla riga 3
+          const safeInsertAt = Math.min(insertAt, baseAOA.length);
+
+          // conta le righe non vuote esistenti nel blocco template a partire da safeInsertAt
+          let existingTemplateRowsCount = 0;
+          for (let i = safeInsertAt; i < baseAOA.length; i++) {
+            const r = baseAOA[i] || [];
+            const allEmpty = (!r || r.length === 0) || r.every(cell => cell === undefined || String(cell).trim() === '');
+            if (allEmpty) break;
+            existingTemplateRowsCount++;
+          }
+
+          const prefix = baseAOA.slice(0, safeInsertAt);
+          const suffix = baseAOA.slice(safeInsertAt + existingTemplateRowsCount);
+          const newAOA = prefix.concat(aoa, suffix);
+
+          setTemplateAOA(newAOA);
+          // aggiorna templateRows con il blocco appena incollato
+          setTemplateRows(aoa.slice());
+
+          showMessage(`Righe incollate nel template in memoria (${flat.length} righe). Usa Esporta per scaricare il file.`, 'success', 5000);
+          console.log('[GENERATE] templateAOA updated in memory. new rows:', aoa.length, 'existingBlockReplaced:', existingTemplateRowsCount);
+        } catch (errInner) {
+          console.error('Errore durante l\'incollamento delle righe nel template in memoria:', errInner);
+          showMessage('Generazione completata ma non è stato possibile incollare nel template in memoria. Controlla la console.', 'warning');
+        }
+      } else {
+        showMessage(`Generata struttura per ${pumps.length} pompe (${flat.length} righe totali). Anteprima pronta.`, 'success', 4000);
+      }
+    } catch (err) {
+      console.error('Errore durante la generazione della struttura:', err);
+      showMessage('Errore durante la generazione. Controlla la console.', 'error');
+    }
+  };
+
+  const handleExport = () => {
+    try {
+      if (!structure || structure.length === 0) {
+        showMessage('Nessuna struttura da esportare. Genera una struttura prima di procedere.', 'warning');
+        return;
+      }
+      console.log('Avvio export', { templateHeader, templateRows, structureLength: structure.length });
+
+      // Stili Excel usati sia nel flusso con template che in quello fallback.
+      const headerStyle = {
+        fill: { fgColor: { rgb: 'FFFFFFFF' } },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        font: { bold: true, color: { rgb: 'FFFF0000' } }
+      };
+      const titleStyle = {
+        fill: { fgColor: { rgb: 'FFFFC000' } },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        font: { bold: true, color: { rgb: 'FF000000' } }
+      };
+      // Raggruppa gli elementi per pompa
+      const pompeMap = {};
+      const pumpNamesOrdered = [];
+      structure.forEach(item => {
+        const pompeName = (item.name && item.name.split ? item.name.split('.')[0] : String(item.name || ''));
+        if (!pompeMap[pompeName]) {
+          pompeMap[pompeName] = [];
+          pumpNamesOrdered.push(pompeName);
+        }
+        pompeMap[pompeName].push(item);
+      });
+
+      // Tutte le colonne che vuoi presenti nel file, anche se vuote
+      const defaultHeaders = [
+        'Tag Name', 'Data type', 'Address PLC', 'ACCESSO', 'Comment',
+        'Stato', 'RaW min', 'RaW maX', 'Unità di misura', 'Scala min', 'Scala maX', 'Modifiche'
+      ];
+
+      const headers = templateHeader && templateHeader.length ? templateHeader : defaultHeaders;
+      const aoa = [];
+      const merges = [];
+      // pumpNames visible to whole function (preserve order from structure)
+      let pumpNames = pumpNamesOrdered.length ? pumpNamesOrdered : Object.keys(pompeMap);
+
+      // Se abbiamo un template caricato (AOA), usalo come base: altrimenti usa il comportamento precedente
+      if (templateAOA && templateHeader && templateHeader.length) {
+        // genera solo le righe da inserire (senza header)
+        let generatedRows = [];
+        if (previewRows && previewRows.length) {
+          // usa la preview già generata (consistente col pulsante Genera)
+          generatedRows = previewRows.slice();
+        } else {
+          // prova a costruire le righe a partire dai dati importati
+          let pumps = [];
+          if (importedRows && importedRows.length) pumps = importedRows;
+          else if (tableData && tableData.trim()) {
+            const sections = tableData.split('---').filter(section => section.trim());
+            sections.forEach((section, idx) => {
+              const lines = section.split('\n').map(l => l.trim()).filter(Boolean);
+              const p = { id: idx + 1, nome: '', indirizzo: '' };
+              lines.forEach(line => {
+                if (line.includes('Nome:')) p.nome = line.split('Nome:')[1].trim();
+                if (line.includes('Indirizzo:')) p.indirizzo = line.split('Indirizzo:')[1].trim();
+              });
+              if (p.nome && p.indirizzo) pumps.push(p);
+            });
+          }
+          const built = buildGeneratedFromPumps(pumps);
+          generatedRows = built.aoa;
+        }
+
+        // Debug: log principali prima di creare AOA
+        console.log('[EXPORT] templateAOA rows:', (templateAOA || []).length, 'templateRows:', (templateRows || []).length, 'generatedRows:', generatedRows.length, 'pumpNames:', pumpNames);
+        if (!generatedRows || generatedRows.length === 0) {
+          showMessage('Attenzione: non ci sono righe generate da inserire nel template. Verifica di aver cliccato "Genera Struttura" e che i dati importati siano validi.', 'warning', 8000);
+          console.warn('[EXPORT] Nessuna riga generata, aborting template export.');
+          return;
+        }
+
+  // Costruisci nuovo AoA a partire dal templateAOA: inserisci generatedRows a partire dalla riga 3 (index 2)
+  const baseAOA = (templateAOA || []).map(r => Array.isArray(r) ? r.slice() : []);
+  // preserva le prime due righe del template (header e riga successiva) quando possibile
+  const insertAt = 2; // 0-based index -> riga 3 nel file Excel
+  const safeInsertAt = Math.min(insertAt, baseAOA.length);
+  const prefix = baseAOA.slice(0, safeInsertAt);
+  // determina il blocco esistente di righe template (righe non-vuote) a partire da insertAt
+  let existingTemplateRowsCount = 0;
+  for (let i = safeInsertAt; i < baseAOA.length; i++) {
+    const r = baseAOA[i] || [];
+    const allEmpty = (!r || r.length === 0) || r.every(cell => cell === undefined || String(cell).trim() === '');
+    if (allEmpty) break;
+    existingTemplateRowsCount++;
+  }
+  const suffix = baseAOA.slice(safeInsertAt + existingTemplateRowsCount);
+  const newAOA = prefix.concat(generatedRows, suffix);
+
+        // usa il nuovo AOA come foglio da esportare
+        const worksheet = XLSX.utils.aoa_to_sheet(newAOA);
+        worksheet['!merges'] = merges;
+
+        // Applica stili e colonne come prima
+        for (let c = 0; c < headers.length; c++) {
+          const cell = XLSX.utils.encode_cell({ c, r: 0 });
+          if (worksheet[cell]) worksheet[cell].s = headerStyle;
+        }
+        const cols = headers.map((h, i) => {
+          if (i === 0 || i === 4 || i === headers.length - 1) return { wch: 40 };
+          if (i === 2) return { wch: 20 };
+          if (i === 1) return { wch: 18 };
+          return { wch: 12 };
+        });
+        worksheet['!cols'] = cols;
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Struttura');
+
+        // nome file: base sul template ma con suffisso export per non sovrascrivere
+        try {
+          // usa il nome fornito dall'utente (exportFilename) o 'Struttura' come default
+          let baseName = (exportFilename && String(exportFilename).trim()) ? String(exportFilename).trim() : 'Struttura';
+          if (baseName.toLowerCase().endsWith('.xlsx')) baseName = baseName.slice(0, -5);
+          // se l'utente ha scelto lo stesso nome del template, aggiungi un suffisso per sicurezza
+          try {
+            if (templateFilename) {
+              const tplBase = String(templateFilename).replace(/\.xlsx$/i, '');
+              if (tplBase.toLowerCase() === baseName.toLowerCase()) {
+                baseName = baseName + '-filled';
+              }
+            }
+          } catch (e) { /* ignore */ }
+          const outName = baseName + '.xlsx';
+          XLSX.writeFile(workbook, outName);
+          showMessage('Struttura esportata nel template: ' + outName, 'success');
+        } catch (errWrite) {
+          console.error('Errore durante writeFile su template:', errWrite);
+          try { XLSX.writeFile(workbook, 'Struttura.xlsx'); } catch(e){ console.error('Secondo tentativo writeFile fallito:', e); }
+          showMessage('Struttura esportata con successo!', 'success');
+        }
+
+        // abbiamo già scritto il file: terminiamo qui
+        return;
+      } else {
+        // fallback: comportamento precedente semplice
+        const headers = defaultHeaders;
+        aoa.push(headers);
+        // separazione: una riga vuota tra header e prima struttura
+        aoa.push(new Array(headers.length).fill(''));
+        // ensure pumpNames in fallback uses object keys order
+        pumpNames = Object.keys(pompeMap);
+        // Output structure rows directly (no pump title rows)
+        pumpNames.forEach((pompeName, pIdx) => {
+          pompeMap[pompeName].forEach(item => {
+            aoa.push([
+              item.name || '',
+              item.type || '',
+              item.address || '',
+              item.access || '',
+              item.comment || '',
+              item.stato || '',
+              item.rawMin !== undefined ? item.rawMin : '',
+              item.rawMax !== undefined ? item.rawMax : '',
+              item.unit || '',
+              item.scalaMin !== undefined ? item.scalaMin : '',
+              item.scalaMax !== undefined ? item.scalaMax : '',
+              ''
+            ]);
+          });
+          // separazione di almeno 3 righe vuote tra pompe (tranne dopo l'ultima)
+          if (pIdx < pumpNames.length - 1) {
+            aoa.push(new Array(headers.length).fill(''));
+            aoa.push(new Array(headers.length).fill(''));
+            aoa.push(new Array(headers.length).fill(''));
+          }
+        });
+      }
+
+      const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+      worksheet['!merges'] = merges;
+
+      // Stili applicati (definiti in alto per riuso nel flusso di export)
+
+      // Applica stile all'intestazione in cima (prima riga)
+      for (let c = 0; c < headers.length; c++) {
+        const cell = XLSX.utils.encode_cell({ c, r: 0 });
+        if (worksheet[cell]) worksheet[cell].s = headerStyle;
+      }
+
+      // No pump title rows to style (we output structure rows directly)
+
+      // Imposta le larghezze delle colonne dinamicamente in base al numero di headers
+      const cols = headers.map((h, i) => {
+        if (i === 0 || i === 4 || i === headers.length - 1) return { wch: 40 };
+        if (i === 2) return { wch: 20 };
+        if (i === 1) return { wch: 18 };
+        return { wch: 12 };
+      });
+      worksheet['!cols'] = cols;
+
+      console.log('Export AOArows:', aoa.length, 'pumpNames:', pumpNames);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Struttura');
+
+      try {
+        const defaultName = 'Struttura';
+        let nameBase = (exportFilename && String(exportFilename).trim()) ? String(exportFilename).trim() : defaultName;
+        if (nameBase.toLowerCase().endsWith('.xlsx')) {
+          nameBase = nameBase.slice(0, -5);
+        }
+        // Evita di sovrascrivere il template originale: se l'utente ha usato lo stesso nome
+        // del template (senza estensione), aggiungiamo un suffisso per sicurezza.
+        try {
+          if (templateFilename) {
+            const tplBase = String(templateFilename).replace(/\.xlsx$/i, '');
+            if (tplBase.toLowerCase() === nameBase.toLowerCase()) {
+              nameBase = nameBase + '-export';
+            }
+          }
+        } catch (e) { /* ignore */ }
+
+        const filename = nameBase + '.xlsx';
+        XLSX.writeFile(workbook, filename);
+        showMessage('Struttura esportata con successo!', 'success');
+      } catch (errWrite) {
+        console.error('Errore durante writeFile:', errWrite);
+        try { XLSX.writeFile(workbook, 'Struttura.xlsx'); } catch(e){ console.error('Secondo tentativo writeFile fallito:', e); }
+        showMessage('Struttura esportata con successo!', 'success');
+      }
+    } catch (err) {
+      console.error('Errore durante esportazione:', err);
+      showMessage('Errore durante l\'esportazione. Controlla la console per dettagli.', 'error');
+    }
+  };
+
+  // Funzione helper per rendere le icone
+  const renderIcon = (name) => {
+    return <i className={`lucide lucide-${name}`}></i>;
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
+      <div className="max-w-7xl mx-auto">
+        {globalMessage && (
+          <div className={
+            `mb-4 p-3 rounded ${globalMessage.type === 'error' ? 'bg-red-100 text-red-800' : globalMessage.type === 'success' ? 'bg-green-100 text-green-800' : globalMessage.type === 'warning' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`
+          }>
+            {globalMessage.text}
+          </div>
+        )}
+        {!loggedIn ? (
+          <div className="bg-white rounded-xl shadow-lg p-8 max-w-md mx-auto">
+            <h2 className="text-2xl font-bold mb-4">Login</h2>
+            <form onSubmit={handleLogin} className="space-y-4">
+              <input 
+                value={username} 
+                onChange={(e)=>setUsername(e.target.value)} 
+                placeholder="Username (admin)" 
+                className="w-full p-3 border rounded" 
+              />
+              <input 
+                type="password" 
+                value={password} 
+                onChange={(e)=>setPassword(e.target.value)} 
+                placeholder="Password" 
+                className="w-full p-3 border rounded" 
+              />
+              <div className="flex justify-end gap-2">
+                <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                  Accedi
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl shadow-lg p-8">
+            <div className="flex justify-between items-center mb-6">
+              <h1 className="text-3xl font-bold">Generatore Struttura</h1>
+              <button onClick={handleLogout} className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">
+                Logout
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <h2 className="text-xl font-semibold">Configurazione</h2>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Tipologia</label>
+                  <select 
+                    value={componentType} 
+                    onChange={(e) => setComponentType(e.target.value)} 
+                    className="w-full p-2 border rounded"
+                  >
+                    <option value="pump">Pompa</option>
+                    <option value="valve">Valvola</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium">Importa Dati Componenti</label>
+                  <div className="flex flex-col gap-2">
+                    <div
+                      id="dropZone"
+                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setDropActive(true); }}
+                      onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setDropActive(true); }}
+                      onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDropActive(false); }}
+                      onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setDropActive(false); const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) readImportedFile(f); }}
+                      className={`w-full p-4 rounded flex flex-col items-center justify-center text-sm ${dropActive ? 'border-2 border-green-400 bg-green-50' : 'border-2 border-dashed border-gray-300 bg-white'}`}>
+                      <div className="dz-inner flex items-center gap-3">
+                        <span className="dz-icon">{renderIcon('cloud')}</span>
+                        <div className="text-gray-600 dz-text">Trascina qui il file Excel (.xlsx, .xls), .ods o CSV oppure clicca il pulsante <strong>Importa Excel</strong></div>
+                      </div>
+                    </div>
+
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv,.ods"
+                      onChange={(e) => { const file = e.target.files[0]; if (file) readImportedFile(file); }}
+                      className="hidden"
+                      id="excelFile"
+                    />
+                    <label
+                      htmlFor="excelFile"
+                      className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center gap-2 cursor-pointer justify-center w-full"
+                    >
+                      {renderIcon('upload')}
+                      Importa Excel
+                    </label>
+                  </div>
+
+                  {/* mostra il template caricato (fisso) */}
+                  {templateFilename && (
+                    <div className="mt-2 text-sm text-gray-700">
+                      Template attivo: <strong>{templateFilename}</strong> (usato come base per l'export)
+                    </div>
+                  )}
+                  {!templateFilename && (
+                    <div className="mt-2 text-sm text-gray-700">
+                      <label className="block mb-1">Template non caricato automaticamente? Caricalo manualmente:</label>
+                      <input type="file" accept=".xlsx,.xls,.ods,.csv" onChange={(e) => { const f = e.target.files[0]; if (f) readTemplateFile(f); }} />
+                      <div className="text-xs text-gray-500 mt-1">Se preferisci, avvia un server locale (es. <code>python -m http.server 8000</code>) e ricarica la pagina per il caricamento automatico.</div>
+                    </div>
+                  )}
+                  {templateFilename && !templateValid && (
+                    <div className="mt-3 p-3 rounded bg-yellow-50 border border-yellow-200 text-sm text-yellow-800">
+                      <strong>Attenzione:</strong> l'header del template non contiene tutte le colonne richieste. Colonne mancanti:
+                      <ul className="list-disc ml-5 mt-2">
+                        {templateIssues.map((m, i) => <li key={i}>{m}</li>)}
+                      </ul>
+                      Assicurati che il file `template_excel.xlsx` contenga le colonne obbligatorie e riprova.
+                    </div>
+                  )}
+
+                  {/* Preview moved to the main preview panel on the right. */}
+
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium mb-2">Oppure Incolla Tabella</label>
+                    <textarea
+                      className="w-full p-2 border rounded h-32 font-mono text-sm"
+                      placeholder="Incolla qui i dati della tabella..."
+                      value={tableData}
+                      onChange={(e) => setTableData(e.target.value)}
+                    ></textarea>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">Configurazione Inverter</label>
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="checkbox" 
+                      id="hasInverter" 
+                      checked={hasInverter} 
+                      onChange={(e) => setHasInverter(e.target.checked)} 
+                      className="w-4 h-4" 
+                    />
+                    <label htmlFor="hasInverter">Dotato di Inverter</label>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={handleGenerate} 
+                  className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 flex items-center gap-2 w-full justify-center"
+                >
+                  {renderIcon('play')}
+                  Genera Struttura
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <h2 className="text-xl font-semibold">Anteprima</h2>
+                <div className="mt-0 bg-white p-3 rounded border border-gray-200 text-sm text-gray-800 resizable-preview">
+                  {previewRows && previewRows.length > 0 ? (
+                    <>
+                      <div className="mb-2 font-semibold">Righe totali da inserire: {previewRows.length} — (anteprima prime 20)</div>
+                      <div className="overflow-x-auto mt-2 font-mono text-xs">
+                        <table className="w-full border-collapse">
+                          <thead>
+                            <tr>
+                              {(templateHeader || ['Tag Name','Data type','Address PLC','ACCESSO','Comment','Stato','RaW min','RaW maX','Unità di misura','Scala min','Scala maX','Modifiche']).map((h, i) => (
+                                <th key={i} className="px-2 py-1 text-left border-b">{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {previewRows.slice(0, 20).map((r, ri) => (
+                              <tr key={ri} className={ri % 2 === 0 ? 'bg-gray-50' : ''}>
+                                {r.map((c, ci) => <td key={ci} className="px-2 py-1 align-top border-b">{c}</td>)}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="bg-gray-100 p-4 rounded-lg h-[320px] overflow-y-auto font-mono text-sm">{tableData ? `Struttura generata con ${structure.length} elementi:\n${structure.map(item => `${item.name} (${item.type})`).join('\n')}` : 'Importa o incolla i dati per vedere l\'anteprima...'}</div>
+                  )}
+                </div>
+                <div className="mt-2">
+                  <label className="block text-sm text-gray-600 mb-1">Nome file export</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={exportFilename}
+                      onChange={(e) => {
+                        // rimuovi eventuale estensione inserita per evitare che l'utente la modifichi
+                        let v = String(e.target.value || '');
+                        v = v.replace(/\.xlsx$/i, '').trim();
+                        setExportFilename(v);
+                        setExportFilenameEdited(true);
+                      }}
+                      placeholder={'Struttura'}
+                      className="flex-1 p-2 border rounded text-sm"
+                    />
+                    <span className="text-sm text-gray-600">.xlsx</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">L'estensione <strong>.xlsx</strong> è fissata e verrà aggiunta automaticamente. Modifica solo il nome base.</p>
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <button 
+                    onClick={handleExport}
+                    className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700 flex items-center gap-2 w-full justify-center"
+                  >
+                    {renderIcon('file-text')}
+                    Esporta Excel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+try {
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(<PumpStructureGenerator />);
+} catch (renderErr) {
+  console.error('Errore durante il render dell\'app:', renderErr);
+  try {
+    const msg = 'Errore durante il render dell\'app: ' + (renderErr && renderErr.message ? renderErr.message : String(renderErr));
+    if (window && typeof window.showMessage === 'function') {
+      window.showMessage(msg, 'error');
+    } else {
+      console.error(msg);
+    }
+  } catch (e) {}
+}
+  </script>
+</body>
+</html>
