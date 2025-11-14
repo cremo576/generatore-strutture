@@ -665,26 +665,38 @@ const PumpStructureGenerator = () => {
         // usa il worksheet originale del template per preservare la formattazione
         let worksheet;
         if (templateWorkbook && templateWorkbook.Sheets && templateWorkbook.SheetNames[0]) {
-          // Usa direttamente il worksheet originale del template
-          const origSheet = templateWorkbook.Sheets[templateWorkbook.SheetNames[0]];
+          // Prendi il worksheet originale del template direttamente (NON clonare)
+          worksheet = templateWorkbook.Sheets[templateWorkbook.SheetNames[0]];
           
-          // Clona il worksheet mantenendo tutte le proprietà e formattazioni
-          worksheet = {};
-          for (let key in origSheet) {
-            if (origSheet.hasOwnProperty(key)) {
-              worksheet[key] = JSON.parse(JSON.stringify(origSheet[key]));
+          // Rimuovi solo le celle di dati (non l'header) - dalla riga 1 in poi
+          const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+          for (let R = 1; R <= range.e.r; R++) {
+            for (let C = 0; C <= range.e.c; C++) {
+              const cellAddr = XLSX.utils.encode_cell({ r: R, c: C });
+              delete worksheet[cellAddr];
             }
           }
           
-          // Aggiungi le nuove righe usando sheet_add_aoa che preserva le celle esistenti
-          // Partiamo dalla riga 1 (dopo l'header che è riga 0)
+          // Aggiungi le nuove righe di dati
           const dataToAdd = [emptyRow].concat(generatedRows);
-          XLSX.utils.sheet_add_aoa(worksheet, dataToAdd, { origin: { r: 1, c: 0 } });
+          for (let R = 0; R < dataToAdd.length; R++) {
+            const row = dataToAdd[R];
+            for (let C = 0; C < row.length; C++) {
+              const cellAddr = XLSX.utils.encode_cell({ r: R + 1, c: C }); // +1 perché riga 0 è header
+              const cellValue = row[C];
+              worksheet[cellAddr] = { 
+                v: cellValue, 
+                t: typeof cellValue === 'number' ? 'n' : 's',
+                w: String(cellValue)
+              };
+            }
+          }
           
-          // Aggiorna il range del worksheet per includere tutte le nuove righe
-          const newRange = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
-          newRange.e.r = dataToAdd.length; // ultima riga = numero di righe di dati
-          worksheet['!ref'] = XLSX.utils.encode_range(newRange);
+          // Aggiorna il range del worksheet
+          worksheet['!ref'] = XLSX.utils.encode_range({
+            s: { r: 0, c: 0 },
+            e: { r: dataToAdd.length, c: headers.length - 1 }
+          });
         } else {
           // Fallback: crea nuovo worksheet
           worksheet = XLSX.utils.aoa_to_sheet(newAOA);
