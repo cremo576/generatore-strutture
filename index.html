@@ -886,16 +886,6 @@ const PumpStructureGenerator = () => {
                   {templateFilename && (
                     <div className="mt-2 text-sm text-gray-700">
                       Template: <strong>{templateFilename}</strong>
-                      <div className="mt-1">
-                        <label className="text-xs text-gray-600">Sostituisci (facoltativo): </label>
-                        <input type="file" accept=".xlsx,.xls,.ods,.csv" onChange={(e) => { const f = e.target.files[0]; if (f) readTemplateFile(f); }} className="text-xs" />
-                      </div>
-                    </div>
-                  )}
-                  {!templateFilename && (
-                    <div className="mt-2 text-sm text-red-600">
-                      <label className="block mb-1">⚠️ Template non caricato. Caricalo manualmente:</label>
-                      <input type="file" accept=".xlsx,.xls,.ods,.csv" onChange={(e) => { const f = e.target.files[0]; if (f) readTemplateFile(f); }} />
                     </div>
                   )}
                   {templateFilename && !templateValid && (
