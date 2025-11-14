@@ -538,28 +538,10 @@ const PumpStructureGenerator = () => {
       setPreviewRows(aoa);
       console.log('[GENERATE] flat length:', flat.length, 'aoa rows:', aoa.length);
 
-      // Se abbiamo un template caricato in memoria, incolla le righe generate nel template
+      // Se abbiamo un template caricato in memoria, le righe sono pronte per l'export
       if (templateAOA && templateHeader && templateHeader.length) {
-        try {
-          const baseAOA = (templateAOA || []).map(r => Array.isArray(r) ? r.slice() : []);
-          const insertAt = 2; // inserisci a partire dalla riga 3
-
-          // Inserisci le righe generate nel template
-          aoa.forEach((row, idx) => {
-            baseAOA[insertAt + idx] = row;
-          });
-
-          // Scrivi il file Excel aggiornato
-          const workbook = XLSX.utils.book_new();
-          const worksheet = XLSX.utils.aoa_to_sheet(baseAOA);
-          XLSX.utils.book_append_sheet(workbook, worksheet, 'Template');
-          XLSX.writeFile(workbook, 'template_excel.xlsx');
-
-          showMessage('Struttura copiata nel template con successo!', 'success');
-        } catch (err) {
-          console.error('Errore durante l\'inserimento nel template:', err);
-          showMessage('Errore durante l\'inserimento nel template.', 'error');
-        }
+        console.log('[GENERATE] Strutture pronte per essere inserite nel template dalla riga 3');
+        showMessage(`Generata struttura per ${pumps.length} pompe (${flat.length} righe totali). Clicca "Esporta Excel" per salvare nel template.`, 'success', 4000);
       } else {
         showMessage(`Generata struttura per ${pumps.length} pompe (${flat.length} righe totali). Anteprima pronta.`, 'success', 4000);
       }
@@ -684,27 +666,18 @@ const PumpStructureGenerator = () => {
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Struttura');
 
-        // nome file: base sul template ma con suffisso export per non sovrascrivere
+        // nome file: usa "template_filled" come default quando si esporta dal template
         try {
-          // usa il nome fornito dall'utente (exportFilename) o 'Struttura' come default
-          let baseName = (exportFilename && String(exportFilename).trim()) ? String(exportFilename).trim() : 'Struttura';
+          // usa il nome fornito dall'utente (exportFilename) o 'template_filled' come default
+          let baseName = (exportFilename && String(exportFilename).trim()) ? String(exportFilename).trim() : 'template_filled';
           if (baseName.toLowerCase().endsWith('.xlsx')) baseName = baseName.slice(0, -5);
-          // se l'utente ha scelto lo stesso nome del template, aggiungi un suffisso per sicurezza
-          try {
-            if (templateFilename) {
-              const tplBase = String(templateFilename).replace(/\.xlsx$/i, '');
-              if (tplBase.toLowerCase() === baseName.toLowerCase()) {
-                baseName = baseName + '-filled';
-              }
-            }
-          } catch (e) { /* ignore */ }
           const outName = baseName + '.xlsx';
           XLSX.writeFile(workbook, outName);
-          showMessage('Struttura esportata nel template: ' + outName, 'success');
+          showMessage('Template esportato con successo: ' + outName, 'success');
         } catch (errWrite) {
           console.error('Errore durante writeFile su template:', errWrite);
-          try { XLSX.writeFile(workbook, 'Struttura.xlsx'); } catch(e){ console.error('Secondo tentativo writeFile fallito:', e); }
-          showMessage('Struttura esportata con successo!', 'success');
+          try { XLSX.writeFile(workbook, 'template_filled.xlsx'); } catch(e){ console.error('Secondo tentativo writeFile fallito:', e); }
+          showMessage('Template esportato: template_filled.xlsx', 'success');
         }
 
         // abbiamo già scritto il file: terminiamo qui
