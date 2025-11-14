@@ -128,7 +128,7 @@ const PumpStructureGenerator = () => {
           continue;
         }
         const ab = await res.arrayBuffer();
-        const wb = XLSX.read(ab, { type: 'array' });
+        const wb = XLSX.read(ab, { type: 'array', cellStyles: true });
         setTemplateWorkbook(wb); // Salva il workbook originale con formattazione
         const first = wb.Sheets[wb.SheetNames[0]];
         const aoa = XLSX.utils.sheet_to_json(first, { header: 1, raw: false });
@@ -383,7 +383,7 @@ const PumpStructureGenerator = () => {
       try {
         console.log('[TEMPLATE] Template caricato, elaborazione in corso...');
         const ab = evt.target.result;
-        const wb = XLSX.read(ab, { type: 'array' });
+        const wb = XLSX.read(ab, { type: 'array', cellStyles: true });
         setTemplateWorkbook(wb); // Salva il workbook originale con formattazione
         const first = wb.Sheets[wb.SheetNames[0]];
         const aoa = XLSX.utils.sheet_to_json(first, { header: 1, raw: false });
@@ -734,7 +734,7 @@ const PumpStructureGenerator = () => {
           let baseName = (exportFilename && String(exportFilename).trim()) ? String(exportFilename).trim() : 'template_filled';
           if (baseName.toLowerCase().endsWith('.xlsx')) baseName = baseName.slice(0, -5);
           const outName = baseName + '.xlsx';
-          XLSX.writeFile(workbook, outName);
+          XLSX.writeFile(workbook, outName, { cellStyles: true, bookSST: false });
           showMessage('Template esportato con successo: ' + outName, 'success');
         } catch (errWrite) {
           console.error('Errore durante writeFile su template:', errWrite);
