@@ -182,6 +182,11 @@ const PumpStructureGenerator = () => {
     console.warn('[TEMPLATE] impossibile caricare automaticamente il template. Ultimo errore:', lastError);
     showMessage(`Impossibile caricare automaticamente ${NAME}. Controlla che il file sia nella root del sito e che il nome sia esatto. Se non vuoi pubblicarlo, caricalo manualmente con il controllo sottostante.`, 'warning', 12000);
   };
+
+  // Carica automaticamente il template all'avvio
+  useEffect(() => {
+    tryLoadTemplate();
+  }, []);
   
   const handleLogin = (e) => {
     e.preventDefault();
