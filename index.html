@@ -11,7 +11,6 @@
   <script src="https://unpkg.com/lucide@0.294.0/dist/umd/lucide.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -643,73 +642,39 @@ const PumpStructureGenerator = () => {
           return;
         }
 
-        // Usa ExcelJS per creare il file con formattazione completa
-        const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Struttura');
+        // Crea il file Excel con header + riga vuota + dati
+        const finalHeaders = ['Tag Name', 'Data type', 'Address PLC', 'ACCESSO', 'Comment', 'Stato', 'RaW min', 'RaW maX', 'Unità di misura', 'Scala min', 'Scala maX', 'Modifiche'];
+        const emptyRow = new Array(finalHeaders.length).fill('');
+        const allRows = [finalHeaders, emptyRow].concat(generatedRows);
         
-        // Definisci le colonne con larghezze
-        worksheet.columns = [
-          { header: 'Tag Name', key: 'tagName', width: 40 },
-          { header: 'Data type', key: 'dataType', width: 18 },
-          { header: 'Address PLC', key: 'address', width: 20 },
-          { header: 'ACCESSO', key: 'access', width: 12 },
-          { header: 'Comment', key: 'comment', width: 40 },
-          { header: 'Stato', key: 'stato', width: 12 },
-          { header: 'RaW min', key: 'rawMin', width: 12 },
-          { header: 'RaW maX', key: 'rawMax', width: 12 },
-          { header: 'Unità di misura', key: 'unit', width: 18 },
-          { header: 'Scala min', key: 'scalaMin', width: 12 },
-          { header: 'Scala maX', key: 'scalaMax', width: 12 },
-          { header: 'Modifiche', key: 'modifiche', width: 40 }
+        const worksheet = XLSX.utils.aoa_to_sheet(allRows);
+        
+        // Imposta larghezze colonne
+        worksheet['!cols'] = [
+          { wch: 40 },  // Tag Name
+          { wch: 18 },  // Data type
+          { wch: 20 },  // Address PLC
+          { wch: 12 },  // ACCESSO
+          { wch: 40 },  // Comment
+          { wch: 12 },  // Stato
+          { wch: 12 },  // RaW min
+          { wch: 12 },  // RaW maX
+          { wch: 18 },  // Unità di misura
+          { wch: 12 },  // Scala min
+          { wch: 12 },  // Scala maX
+          { wch: 40 }   // Modifiche
         ];
         
-        // Applica stili all'header (riga 1): testo rosso, centrato, grassetto
-        const headerRow = worksheet.getRow(1);
-        headerRow.font = { bold: true, color: { argb: 'FFFF0000' } };
-        headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
-        headerRow.height = 20;
-        
-        // Aggiungi riga vuota
-        worksheet.addRow({});
-        
-        // Aggiungi i dati generati
-        generatedRows.forEach(row => {
-          worksheet.addRow({
-            tagName: row[0] || '',
-            dataType: row[1] || '',
-            address: row[2] || '',
-            access: row[3] || '',
-            comment: row[4] || '',
-            stato: row[5] || '',
-            rawMin: row[6] || '',
-            rawMax: row[7] || '',
-            unit: row[8] || '',
-            scalaMin: row[9] || '',
-            scalaMax: row[10] || '',
-            modifiche: row[11] || ''
-          });
-        });
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Struttura');
 
-        // Esporta il file con ExcelJS
+        // Esporta il file
         try {
           let baseName = (exportFilename && String(exportFilename).trim()) ? String(exportFilename).trim() : 'Struttura';
           if (baseName.toLowerCase().endsWith('.xlsx')) baseName = baseName.slice(0, -5);
           const outName = baseName + '.xlsx';
-          
-          // ExcelJS genera un buffer che poi scarichiamo come file
-          workbook.xlsx.writeBuffer().then(buffer => {
-            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = outName;
-            a.click();
-            window.URL.revokeObjectURL(url);
-            showMessage('File esportato con successo: ' + outName, 'success');
-          }).catch(err => {
-            console.error('Errore durante la generazione del file:', err);
-            showMessage('Errore durante l\'esportazione del file', 'error');
-          });
+          XLSX.writeFile(workbook, outName);
+          showMessage('File esportato con successo: ' + outName, 'success');
         } catch (errWrite) {
           console.error('Errore durante export:', errWrite);
           showMessage('Errore durante l\'esportazione: ' + errWrite.message, 'error');
