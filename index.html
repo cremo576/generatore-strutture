@@ -665,20 +665,37 @@ const PumpStructureGenerator = () => {
         // usa il worksheet originale del template per preservare la formattazione
         let worksheet;
         if (templateWorkbook && templateWorkbook.Sheets && templateWorkbook.SheetNames[0]) {
-          // Clona il worksheet originale per preservare formattazione
+          // Clona il worksheet originale per preservare completamente la formattazione
           const origSheet = templateWorkbook.Sheets[templateWorkbook.SheetNames[0]];
-          worksheet = XLSX.utils.aoa_to_sheet(newAOA);
-          // Copia le proprietà di formattazione dalla riga header originale
-          if (origSheet['!cols']) worksheet['!cols'] = origSheet['!cols'];
-          if (origSheet['!rows']) worksheet['!rows'] = origSheet['!rows'];
-          if (origSheet['!merges']) worksheet['!merges'] = origSheet['!merges'];
-          // Copia gli stili delle celle della riga header
-          for (let c = 0; c < headers.length; c++) {
-            const cellAddr = XLSX.utils.encode_cell({ c, r: 0 });
-            if (origSheet[cellAddr] && origSheet[cellAddr].s) {
-              if (worksheet[cellAddr]) worksheet[cellAddr].s = origSheet[cellAddr].s;
+          worksheet = {};
+          // Copia tutte le proprietà del worksheet originale
+          for (let key in origSheet) {
+            if (origSheet.hasOwnProperty(key)) {
+              worksheet[key] = origSheet[key];
             }
           }
+          // Rimuovi le righe esistenti dopo l'header (dalla riga 2 in poi)
+          const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+          for (let R = 1; R <= range.e.r; R++) {
+            for (let C = 0; C <= range.e.c; C++) {
+              const cellAddr = XLSX.utils.encode_cell({ r: R, c: C });
+              delete worksheet[cellAddr];
+            }
+          }
+          // Aggiungi le nuove righe (emptyRow + generatedRows) partendo dalla riga 2
+          const allNewRows = [emptyRow].concat(generatedRows);
+          for (let R = 0; R < allNewRows.length; R++) {
+            const row = allNewRows[R];
+            for (let C = 0; C < row.length; C++) {
+              const cellAddr = XLSX.utils.encode_cell({ r: R + 1, c: C }); // +1 perché riga 0 è header
+              worksheet[cellAddr] = { v: row[C], t: 's' };
+            }
+          }
+          // Aggiorna il range del worksheet
+          worksheet['!ref'] = XLSX.utils.encode_range({
+            s: { r: 0, c: 0 },
+            e: { r: allNewRows.length, c: headers.length - 1 }
+          });
         } else {
           // Fallback: crea nuovo worksheet
           worksheet = XLSX.utils.aoa_to_sheet(newAOA);
@@ -1055,9 +1072,9 @@ const STRUCTURE_TEMPLATES = {
     { suffix: '.Monitor.Voltage', type: 'Real', address: '3142,0', access: 'R', comment: 'Feedback Tensione inverter', rawMin: 0, rawMax: 9999, unit: 'V', scalaMin: 0, scalaMax: 9999 },
     { suffix: '.Worktime.Reset', type: 'Bool', address: '3162,0', access: 'R/W', comment: 'Comando reset ore parziali utenza' },
     { suffix: '.Worktime.Total.Hour', type: 'DInt', address: '3164,0', access: 'R', comment: 'Ore totali', rawMin: 0, rawMax: 9999999, unit: 'Min', scalaMin: 0, scalaMax: 9999999 },
-    { suffix: '.Worktime.Total.Min', type: 'SInt', address: '3168,0', access: 'R', comment: 'Minuti totali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 },
+    { suffix: '.Worktime.Total.Min', type: 'Int', address: '3168,0', access: 'R', comment: 'Minuti totali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 },
     { suffix: '.Worktime.Partial.Hour', type: 'DInt', address: '3172,0', access: 'R', comment: 'Ore Parziali', rawMin: 0, rawMax: 9999999, unit: 'Min', scalaMin: 0, scalaMax: 9999999 },
-    { suffix: '.Worktime.Partial.Min', type: 'SInt', address: '3176,0', access: 'R', comment: 'Minuti Parziali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 }
+    { suffix: '.Worktime.Partial.Min', type: 'Int', address: '3176,0', access: 'R', comment: 'Minuti Parziali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 }
   ],
   pump_noinv: [
     { suffix: '.Command.Automatic', type: 'Bool', address: '3118,0', access: 'R/W', comment: 'Comando modalità automatica' },
@@ -1070,9 +1087,9 @@ const STRUCTURE_TEMPLATES = {
     { suffix: '.Status.Selector', type: 'Bool', address: '3128,5', access: 'R', comment: 'Selettore utenza in remoto' },
     { suffix: '.Worktime.Reset', type: 'Bool', address: '3162,0', access: 'R/W', comment: 'Comando reset ore parziali utenza' },
     { suffix: '.Worktime.Total.Hour', type: 'DInt', address: '3164,0', access: 'R', comment: 'Ore totali', rawMin: 0, rawMax: 9999999, unit: 'Min', scalaMin: 0, scalaMax: 9999999 },
-    { suffix: '.Worktime.Total.Min', type: 'SInt', address: '3168,0', access: 'R', comment: 'Minuti totali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 },
+    { suffix: '.Worktime.Total.Min', type: 'Int', address: '3168,0', access: 'R', comment: 'Minuti totali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 },
     { suffix: '.Worktime.Partial.Hour', type: 'DInt', address: '3172,0', access: 'R', comment: 'Ore Parziali', rawMin: 0, rawMax: 9999999, unit: 'Min', scalaMin: 0, scalaMax: 9999999 },
-    { suffix: '.Worktime.Partial.Min', type: 'SInt', address: '3176,0', access: 'R', comment: 'Minuti Parziali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 }
+    { suffix: '.Worktime.Partial.Min', type: 'Int', address: '3176,0', access: 'R', comment: 'Minuti Parziali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 }
   ],
   valve_inv: [
     { suffix: '.Command.Automatic', type: 'Bool', address: '2482,0', access: 'R/W', comment: 'Comando modalità automatica' },
@@ -1099,9 +1116,9 @@ const STRUCTURE_TEMPLATES = {
     { suffix: '.Status.Selector', type: 'Bool', address: '2492,5', access: 'R', comment: 'Selettore utenza in remoto' },
     { suffix: '.Worktime.Reset', type: 'Bool', address: '2526,0', access: 'R/W', comment: 'Comando reset ore parziali utenza' },
     { suffix: '.Worktime.Total.Hour', type: 'DInt', address: '2528,0', access: 'R', comment: 'Ore totali', rawMin: 0, rawMax: 9999999, unit: 'Min', scalaMin: 0, scalaMax: 9999999 },
-    { suffix: '.Worktime.Total.Min', type: 'SInt', address: '2532,0', access: 'R', comment: 'Minuti totali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 },
+    { suffix: '.Worktime.Total.Min', type: 'Int', address: '2532,0', access: 'R', comment: 'Minuti totali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 },
     { suffix: '.Worktime.Partial.Hour', type: 'DInt', address: '2536,0', access: 'R', comment: 'Ore Parziali', rawMin: 0, rawMax: 9999999, unit: 'Min', scalaMin: 0, scalaMax: 9999999 },
-    { suffix: '.Worktime.Partial.Min', type: 'SInt', address: '2540,0', access: 'R', comment: 'Minuti Parziali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 }
+    { suffix: '.Worktime.Partial.Min', type: 'Int', address: '2540,0', access: 'R', comment: 'Minuti Parziali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 }
   ]
 };
 // Helper per parsare indirizzi nel formato "word,bit"
