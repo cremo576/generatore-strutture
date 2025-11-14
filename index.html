@@ -1074,11 +1074,73 @@ const STRUCTURE_TEMPLATES = {
     { suffix: 'Worktime.Partial.Min', type: 'SInt', address: '2540,0', access: 'R', comment: 'Minuti Parziali', rawMin: 0, rawMax: 59, unit: 'Min' }
   ]
 };
-// Definizione di base per addressFromSequence
+// Helper per parsare indirizzi nel formato "word,bit"
+function parseAddr(s) {
+  if (!s || typeof s !== 'string') return { word: 0, bit: 0 };
+  const p = String(s).split(',');
+  return { word: parseInt(p[0], 10) || 0, bit: parseInt(p[1], 10) || 0 };
+}
+
+// Funzione per calcolare l'indirizzo sommando l'offset della sequenza all'indirizzo base
 function addressFromSequence(baseAddress, seqKey, index) {
-  // Calcola un indirizzo incrementale basato su un valore di base e un indice
-  const base = parseInt(baseAddress, 10) || 0;
-  return base + index;
+  // Definizione delle sequenze (devono corrispondere a quelle in ADDRESS_SEQUENCES)
+  const ADDRESS_SEQUENCES = {
+    'pump_inv': [
+      '256,0','256,1','256,3','258,0','266,0','266,2','266,3','266,4','266,5','268,0','272,0','276,0','280,0','300,0','302,0','306,0','310,0','314,0'
+    ],
+    'pump_noinv': [
+      '256,0','256,1','256,3','266,0','266,2','266,3','266,4','266,5','300,0','302,0','306,0','310,0','314,0'
+    ],
+    'valve_inv': [
+      '256,0','256,1','256,3','258,0','266,0','266,2','266,3','266,4','266,5','268,0','272,0','276,0'
+    ],
+    'valve_noinv': [
+      '256,0','256,1','256,3','266,0','266,2','266,3','266,4','266,5','300,0','302,0','306,0','310,0','314,0'
+    ]
+  };
+  
+  const seq = ADDRESS_SEQUENCES[seqKey];
+  if (!seq || index < 0 || index >= seq.length) {
+    console.warn('[addressFromSequence] Sequenza non trovata o indice fuori range:', { seqKey, index });
+    return null;
+  }
+  
+  // Parse dell'indirizzo base (può essere "3180" o "3180,0")
+  const base = parseAddr(String(baseAddress).includes(',') ? baseAddress : `${baseAddress},0`);
+  // Parse dell'offset dalla sequenza
+  const offset = parseAddr(seq[index]);
+  
+  // Somma word e bit
+  let word = base.word + offset.word;
+  let bit = base.bit + offset.bit;
+  
+  // Gestione overflow dei bit (se >= 16, incrementa word)
+  if (bit >= 16) {
+    const carry = Math.floor(bit / 16);
+    word += carry;
+    bit = bit % 16;
+  }
+  
+  // Gestione bit negativi (con prestito)
+  if (bit < 0) {
+    const borrow = Math.ceil(Math.abs(bit) / 16);
+    word -= borrow;
+    bit = ((bit % 16) + 16) % 16;
+  }
+  
+  const result = `${word},${bit}`;
+  console.log('[addressFromSequence]', { 
+    seqKey, 
+    index, 
+    seqValue: seq[index], 
+    baseAddress, 
+    baseParsed: base,
+    offsetParsed: offset,
+    resultWord: word,
+    resultBit: bit,
+    result 
+  });
+  return result;
 }
   </script>
 </body>
