@@ -189,10 +189,11 @@ const PumpStructureGenerator = () => {
     }
   };
 
-  // Carica automaticamente il template all'avvio
-  useEffect(() => {
-    tryLoadTemplate();
-  }, []);
+  // Non caricare più il template automaticamente - non è necessario
+  // useEffect(() => {
+  //   tryLoadTemplate();
+  // }, []);
+
   
   const handleLogin = (e) => {
     e.preventDefault();
@@ -634,112 +635,65 @@ const PumpStructureGenerator = () => {
         }
 
         // Debug: log principali prima di creare AOA
-        console.log('[EXPORT] templateAOA rows:', (templateAOA || []).length, 'templateRows:', (templateRows || []).length, 'generatedRows:', generatedRows.length, 'pumpNames:', pumpNames);
+        console.log('[EXPORT] generatedRows:', generatedRows.length, 'pumpNames:', pumpNames);
         if (!generatedRows || generatedRows.length === 0) {
-          showMessage('Attenzione: non ci sono righe generate da inserire nel template. Verifica di aver cliccato "Genera Struttura" e che i dati importati siano validi.', 'warning', 8000);
-          console.warn('[EXPORT] Nessuna riga generata, aborting template export.');
+          showMessage('Attenzione: non ci sono righe generate. Verifica di aver cliccato "Genera Struttura" e che i dati importati siano validi.', 'warning', 8000);
+          console.warn('[EXPORT] Nessuna riga generata, aborting export.');
           return;
         }
 
-  // Costruisci nuovo AoA a partire dal templateAOA: inserisci generatedRows a partire dalla riga 3 (index 2)
-  const baseAOA = (templateAOA || []).map(r => Array.isArray(r) ? r.slice() : []);
-  // preserva solo la riga header del template (riga 1)
-  const insertAt = 1; // 0-based index -> riga 2 nel file Excel
-  const safeInsertAt = Math.min(insertAt, baseAOA.length);
-  const prefix = baseAOA.slice(0, safeInsertAt);
-  
-  // Aggiungi una riga vuota di separazione tra header e strutture generate
-  const emptyRow = new Array(headers.length).fill('');
-  
-  // determina il blocco esistente di righe template (righe non-vuote) a partire da insertAt
-  let existingTemplateRowsCount = 0;
-  for (let i = safeInsertAt; i < baseAOA.length; i++) {
-    const r = baseAOA[i] || [];
-    const allEmpty = (!r || r.length === 0) || r.every(cell => cell === undefined || String(cell).trim() === '');
-    if (allEmpty) break;
-    existingTemplateRowsCount++;
-  }
-  const suffix = baseAOA.slice(safeInsertAt + existingTemplateRowsCount);
-  const newAOA = prefix.concat([emptyRow], generatedRows, suffix);
-
-        // usa il worksheet originale del template per preservare la formattazione
-        let worksheet;
-        if (templateWorkbook && templateWorkbook.Sheets && templateWorkbook.SheetNames[0]) {
-          // Prendi il worksheet originale del template direttamente (NON clonare)
-          worksheet = templateWorkbook.Sheets[templateWorkbook.SheetNames[0]];
-          
-          // Rimuovi solo le celle di dati (non l'header) - dalla riga 1 in poi
-          const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
-          for (let R = 1; R <= range.e.r; R++) {
-            for (let C = 0; C <= range.e.c; C++) {
-              const cellAddr = XLSX.utils.encode_cell({ r: R, c: C });
-              delete worksheet[cellAddr];
-            }
+        // Crea il worksheet direttamente con header + riga vuota + dati
+        const finalHeaders = ['Tag Name', 'Data type', 'Address PLC', 'ACCESSO', 'Comment', 'Stato', 'RaW min', 'RaW maX', 'Unità di misura', 'Scala min', 'Scala maX', 'Modifiche'];
+        const emptyRow = new Array(finalHeaders.length).fill('');
+        const allRows = [finalHeaders, emptyRow].concat(generatedRows);
+        
+        const worksheet = XLSX.utils.aoa_to_sheet(allRows);
+        
+        // Applica stili all'header (riga 0): testo rosso, centrato, grassetto
+        const headerStyle = {
+          font: { bold: true, color: { rgb: 'FF0000' } },
+          alignment: { horizontal: 'center', vertical: 'center' },
+          fill: { fgColor: { rgb: 'FFFFFF' } }
+        };
+        
+        for (let c = 0; c < finalHeaders.length; c++) {
+          const cellAddr = XLSX.utils.encode_cell({ c, r: 0 });
+          if (worksheet[cellAddr]) {
+            worksheet[cellAddr].s = headerStyle;
           }
-          
-          // Aggiungi le nuove righe di dati
-          const dataToAdd = [emptyRow].concat(generatedRows);
-          for (let R = 0; R < dataToAdd.length; R++) {
-            const row = dataToAdd[R];
-            for (let C = 0; C < row.length; C++) {
-              const cellAddr = XLSX.utils.encode_cell({ r: R + 1, c: C }); // +1 perché riga 0 è header
-              const cellValue = row[C];
-              worksheet[cellAddr] = { 
-                v: cellValue, 
-                t: typeof cellValue === 'number' ? 'n' : 's',
-                w: String(cellValue)
-              };
-            }
-          }
-          
-          // Aggiorna il range del worksheet
-          worksheet['!ref'] = XLSX.utils.encode_range({
-            s: { r: 0, c: 0 },
-            e: { r: dataToAdd.length, c: headers.length - 1 }
-          });
-        } else {
-          // Fallback: crea nuovo worksheet
-          worksheet = XLSX.utils.aoa_to_sheet(newAOA);
-          worksheet['!merges'] = merges;
-          // Applica stili di default solo nel fallback
-          for (let c = 0; c < headers.length; c++) {
-            const cell = XLSX.utils.encode_cell({ c, r: 0 });
-            if (worksheet[cell]) worksheet[cell].s = headerStyle;
-          }
-          const cols = headers.map((h, i) => {
-            if (i === 0 || i === 4 || i === headers.length - 1) return { wch: 40 };
-            if (i === 2) return { wch: 20 };
-            if (i === 1) return { wch: 18 };
-            return { wch: 12 };
-          });
-          worksheet['!cols'] = cols;
         }
+        
+        // Imposta larghezze colonne
+        worksheet['!cols'] = [
+          { wch: 40 },  // Tag Name
+          { wch: 18 },  // Data type
+          { wch: 20 },  // Address PLC
+          { wch: 12 },  // ACCESSO
+          { wch: 40 },  // Comment
+          { wch: 12 },  // Stato
+          { wch: 12 },  // RaW min
+          { wch: 12 },  // RaW maX
+          { wch: 18 },  // Unità di misura
+          { wch: 12 },  // Scala min
+          { wch: 12 },  // Scala maX
+          { wch: 40 }   // Modifiche
+        ];
+        
+        // Crea workbook e aggiungi il foglio
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Struttura');
 
-        // Usa il workbook del template se disponibile, altrimenti crea uno nuovo
-        let workbook;
-        if (templateWorkbook && templateWorkbook.Sheets && templateWorkbook.SheetNames[0]) {
-          // Clona il workbook del template
-          workbook = templateWorkbook;
-          // Sostituisci il primo foglio con quello modificato
-          workbook.Sheets[workbook.SheetNames[0]] = worksheet;
-        } else {
-          // Fallback: crea nuovo workbook
-          workbook = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(workbook, worksheet, 'Struttura');
-        }
-
-        // nome file: usa "template_filled" come default quando si esporta dal template
+        // Esporta il file
         try {
-          // usa il nome fornito dall'utente (exportFilename) o 'template_filled' come default
-          let baseName = (exportFilename && String(exportFilename).trim()) ? String(exportFilename).trim() : 'template_filled';
+          let baseName = (exportFilename && String(exportFilename).trim()) ? String(exportFilename).trim() : 'Struttura';
           if (baseName.toLowerCase().endsWith('.xlsx')) baseName = baseName.slice(0, -5);
           const outName = baseName + '.xlsx';
-          XLSX.writeFile(workbook, outName, { cellStyles: true, bookSST: false });
-          showMessage('Template esportato con successo: ' + outName, 'success');
+          XLSX.writeFile(workbook, outName, { cellStyles: true });
+          showMessage('File esportato con successo: ' + outName, 'success');
         } catch (errWrite) {
-          console.error('Errore durante writeFile su template:', errWrite);
-          try { XLSX.writeFile(workbook, 'template_filled.xlsx'); } catch(e){ console.error('Secondo tentativo writeFile fallito:', e); }
-          showMessage('Template esportato: template_filled.xlsx', 'success');
+          console.error('Errore durante writeFile:', errWrite);
+          try { XLSX.writeFile(workbook, 'Struttura.xlsx'); } catch(e){ console.error('Secondo tentativo writeFile fallito:', e); }
+          showMessage('File esportato: Struttura.xlsx', 'success');
         }
 
         // abbiamo già scritto il file: terminiamo qui
@@ -930,22 +884,6 @@ const PumpStructureGenerator = () => {
                       Importa Excel
                     </label>
                   </div>
-
-                  {/* mostra il template caricato (fisso) */}
-                  {templateFilename && (
-                    <div className="mt-2 text-sm text-gray-700">
-                      Template: <strong>{templateFilename}</strong>
-                    </div>
-                  )}
-                  {templateFilename && !templateValid && (
-                    <div className="mt-3 p-3 rounded bg-yellow-50 border border-yellow-200 text-sm text-yellow-800">
-                      <strong>Attenzione:</strong> l'header del template non contiene tutte le colonne richieste. Colonne mancanti:
-                      <ul className="list-disc ml-5 mt-2">
-                        {templateIssues.map((m, i) => <li key={i}>{m}</li>)}
-                      </ul>
-                      Assicurati che il file `template_excel.xlsx` contenga le colonne obbligatorie e riprova.
-                    </div>
-                  )}
 
                   {/* Preview moved to the main preview panel on the right. */}
 
