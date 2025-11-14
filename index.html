@@ -233,6 +233,184 @@ const PumpStructureGenerator = () => {
     }
   };
 
+  // Funzione per leggere il file importato (Excel o CSV)
+  const readImportedFile = (file) => {
+    if (!file) {
+      console.error('[IMPORT] Nessun file selezionato.');
+      return;
+    }
+
+    console.log('[IMPORT] File selezionato:', file.name, 'Tipo:', file.type, 'Dimensione:', file.size);
+
+    const reader = new FileReader();
+    
+    reader.onerror = (error) => {
+      console.error('[IMPORT] Errore durante la lettura del file:', error);
+      showMessage('Errore durante la lettura del file.', 'error');
+    };
+
+    reader.onload = (evt) => {
+      try {
+        console.log('[IMPORT] File caricato, elaborazione in corso...');
+        let data;
+        if (file.name.endsWith('.csv')) {
+          // Gestione file CSV
+          const text = evt.target.result;
+          console.log('[IMPORT] Contenuto CSV:', text.substring(0, 200));
+          const rows = text.split(/\r\n|\n/)
+                         .filter(row => row.trim().length > 0);
+          data = rows.map(row => row.split(/[,;\t]/));
+          console.log('[IMPORT] Righe CSV parsate:', data.length);
+        } else {
+          // Gestione file Excel (.xlsx, .xls)
+          console.log('[IMPORT] Lettura file Excel...');
+          const workbook = XLSX.read(evt.target.result, { type: 'array' });
+          console.log('[IMPORT] Fogli disponibili:', workbook.SheetNames);
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          
+          // Converti il foglio Excel in array di righe
+          const excelRows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+          console.log('[IMPORT] Righe Excel totali:', excelRows.length);
+          console.log('[IMPORT] Prima riga (header):', excelRows[0]);
+          console.log('[IMPORT] Seconda riga (esempio):', excelRows[1]);
+          
+          // NON rimuovere l'intestazione: leggi dalla prima riga in poi
+          data = excelRows
+            .filter(row => row && row.length > 0 && row.some(cell => cell !== undefined && String(cell).trim() !== ''));
+          console.log('[IMPORT] Righe filtrate:', data.length);
+        }
+        
+        if (!data || data.length === 0) {
+          console.error('[IMPORT] Nessun dato valido trovato nel file importato.');
+          showMessage('Il file importato non contiene dati validi.', 'error');
+          return;
+        }
+
+        // Genera la struttura per ciascuna pompa utilizzando solo il nome e l'indirizzo iniziale
+        const numericFrom = (s) => {
+          if (!s) return null;
+          const m = String(s).match(/(\d+[,.]?\d*)/);
+          if (!m) return null;
+          return parseFloat(m[1].replace(',', '.'));
+        };
+
+        const rawStructures = data.map((row, index) => {
+          const nome = (row[0] || '').toString().trim();
+          const indirizzo = row[2] !== undefined ? row[2].toString().trim() : '';
+          console.log(`[IMPORT] Riga ${index}: Nome='${nome}', Indirizzo='${indirizzo}'`);
+          return {
+            id: index + 1,
+            nome: nome,
+            indirizzo: indirizzo,
+            hasValidAddress: numericFrom(indirizzo) !== null
+          };
+        });
+
+        console.log('[IMPORT] Strutture grezze lette dal file:', rawStructures);
+
+        // Filtra righe non valide: nome non vuoto E indirizzo numerico valido
+        const structures = rawStructures.filter(s => {
+          return s.nome && s.nome.length > 0 && s.hasValidAddress;
+        });
+
+        console.log('[IMPORT] Strutture filtrate (valide):', structures);
+
+        if (structures.length === 0) {
+          console.warn('[IMPORT] Nessuna struttura valida trovata. Verifica il formato del file.');
+          showMessage('Nessuna struttura valida trovata nel file. Assicurati che il file contenga:\n- Colonna 1: Nome pompa/valvola\n- Colonna 3: Indirizzo iniziale (formato numerico, es. 100 o 100,0)', 'warning');
+          return;
+        }
+
+        // Converti la struttura in formato leggibile per l'anteprima
+        const formattedData = structures.map(structure => {
+          return `ID: ${structure.id}\nNome: ${structure.nome}\nIndirizzo: ${structure.indirizzo}\n`;
+        }).join('\n---\n');
+
+        console.log('[IMPORT] Dati formattati:', formattedData);
+
+        // Imposta i dati nella textarea
+        setTableData(formattedData);
+        setImportedRows(structures);
+
+        // Non generiamo automaticamente la struttura all'import.
+        setStructure([]);
+        setPreviewRows([]);
+        console.log('[IMPORT] Importazione completata con successo! Clicca "Genera Struttura" per creare la struttura.');
+        showMessage(`Importate ${structures.length} pompe/valvole con successo! Clicca "Genera Struttura" per procedere.`, 'success');
+      } catch (error) {
+        console.error('[IMPORT] Errore durante la lettura del file:', error);
+        console.error('[IMPORT] Stack trace:', error.stack);
+        showMessage('Errore durante la lettura del file: ' + error.message, 'error');
+      }
+    };
+
+    if (file.name.endsWith('.csv')) {
+      reader.readAsText(file);
+    } else {
+      reader.readAsArrayBuffer(file);
+    }
+  };
+
+  // Funzione per leggere il file template
+  const readTemplateFile = (file) => {
+    if (!file) {
+      console.error('[TEMPLATE] Nessun file template selezionato.');
+      return;
+    }
+
+    console.log('[TEMPLATE] File template selezionato:', file.name);
+
+    const reader = new FileReader();
+    
+    reader.onerror = (error) => {
+      console.error('[TEMPLATE] Errore durante la lettura del template:', error);
+      showMessage('Errore durante la lettura del template.', 'error');
+    };
+
+    reader.onload = (evt) => {
+      try {
+        console.log('[TEMPLATE] Template caricato, elaborazione in corso...');
+        const ab = evt.target.result;
+        const wb = XLSX.read(ab, { type: 'array' });
+        const first = wb.Sheets[wb.SheetNames[0]];
+        const aoa = XLSX.utils.sheet_to_json(first, { header: 1, raw: false });
+        
+        if (!aoa || aoa.length === 0) {
+          showMessage('Il template è vuoto o non valido.', 'error');
+          return;
+        }
+
+        const header = aoa[0].map(h => (h === undefined ? '' : String(h)));
+        setTemplateHeader(header);
+        try {
+          setTemplateHeaderMap(computeHeaderMap(header));
+        } catch (e) { setTemplateHeaderMap(null); }
+
+        const aoaNormalized = aoa.map(r => (r || []).map(c => (c === undefined ? '' : String(c))));
+        setTemplateAOA(aoaNormalized);
+
+        const rows = [];
+        for (let i = 1; i < aoaNormalized.length; i++) {
+          const r = aoaNormalized[i];
+          const allEmpty = (!r || r.length === 0) || r.every(cell => cell === undefined || String(cell).trim() === '');
+          if (allEmpty) break;
+          rows.push(r.map(c => (c === undefined ? '' : String(c))));
+        }
+        if (rows.length > 0) setTemplateRows(rows);
+
+        setTemplateFilename(file.name);
+
+        console.log('[TEMPLATE] Template caricato con successo:', { header, rowsCount: rows.length });
+        showMessage(`Template caricato con successo: ${file.name} (${rows.length} righe).`, 'success');
+      } catch (error) {
+        console.error('[TEMPLATE] Errore durante la lettura del template:', error);
+        showMessage('Errore durante la lettura del template: ' + error.message, 'error');
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
+  };
+
   // Costruisce sia la struttura flat (array di oggetti) che le righe AoA da inserire nel template,
   // a partire dalle pompe fornite (array di { id, nome, indirizzo }). 
   // Questa versione segue rigidamente l'ordine e il numero di campi definiti in STRUCTURE_TEMPLATES
@@ -929,22 +1107,5 @@ function addressFromSequence(baseAddress, seqKey, index) {
   return base + index;
 }
   </script>
-  <script>
-  // Definizione della funzione readImportedFile
-  function readImportedFile(file) {
-    // Implementazione di esempio per leggere un file
-    console.log(`Reading file: ${file}`);
-    // Restituisce un contenuto simulato
-    return "Contenuto del file importato";
-  }
-
-  // Definizione della funzione readTemplateFile
-  function readTemplateFile(template) {
-    // Implementazione di esempio per leggere un template
-    console.log(`Reading template: ${template}`);
-    // Restituisce un contenuto simulato
-    return "Contenuto del template";
-  }
-</script>
 </body>
 </html>
