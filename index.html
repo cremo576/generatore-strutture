@@ -160,6 +160,7 @@ const PumpStructureGenerator = () => {
           'Tag Name','Data type','Address PLC','ACCESSO','Comment','Stato','RaW min','RaW maX','Unità di misura','Scala min','Scala maX','Modifiche'
         ];
         const normalize = (s) => String(s || '').normalize('NFD').replace(/\u0300-\u036f/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g,'');
+
         const hdrNorm = header.map(h => normalize(h));
         const missing = [];
         required.forEach(r => { if (!hdrNorm.some(hn => hn === normalize(r))) missing.push(r); });
@@ -928,5 +929,22 @@ function addressFromSequence(baseAddress, seqKey, index) {
   return base + index;
 }
   </script>
+  <script>
+  // Definizione della funzione readImportedFile
+  function readImportedFile(file) {
+    // Implementazione di esempio per leggere un file
+    console.log(`Reading file: ${file}`);
+    // Restituisce un contenuto simulato
+    return "Contenuto del file importato";
+  }
+
+  // Definizione della funzione readTemplateFile
+  function readTemplateFile(template) {
+    // Implementazione di esempio per leggere un template
+    console.log(`Reading template: ${template}`);
+    // Restituisce un contenuto simulato
+    return "Contenuto del template";
+  }
+</script>
 </body>
 </html>
