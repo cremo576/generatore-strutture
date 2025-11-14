@@ -714,8 +714,18 @@ const PumpStructureGenerator = () => {
           worksheet['!cols'] = cols;
         }
 
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Struttura');
+        // Usa il workbook del template se disponibile, altrimenti crea uno nuovo
+        let workbook;
+        if (templateWorkbook && templateWorkbook.Sheets && templateWorkbook.SheetNames[0]) {
+          // Clona il workbook del template
+          workbook = templateWorkbook;
+          // Sostituisci il primo foglio con quello modificato
+          workbook.Sheets[workbook.SheetNames[0]] = worksheet;
+        } else {
+          // Fallback: crea nuovo workbook
+          workbook = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(workbook, worksheet, 'Struttura');
+        }
 
         // nome file: usa "template_filled" come default quando si esporta dal template
         try {
