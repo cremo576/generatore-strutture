@@ -106,7 +106,7 @@ const PumpStructureGenerator = () => {
   };
 
   // Funzione per caricare il template (prova percorsi alternativi e log chiari)
-  const tryLoadTemplate = async () => {
+  const tryLoadTemplate = async (showMsg = false) => {
     const NAME = 'template_excel.xlsx';
     // prova una lista di possibili URL (relative e assolute)
     const candidatePaths = [
@@ -169,7 +169,9 @@ const PumpStructureGenerator = () => {
         setTemplateIssues(missing);
 
         console.log('[TEMPLATE] Caricato con successo da', p, { header, rowsCount: rows.length, missing });
-        showMessage(`Template caricato automaticamente da ${p} (${rows.length} righe).`, missing.length === 0 ? 'success' : 'warning', 5000);
+        if (showMsg) {
+          showMessage(`Template caricato da ${p} (${rows.length} righe).`, missing.length === 0 ? 'success' : 'warning', 5000);
+        }
         return; // successo, non provare altri paths
       } catch (err) {
         console.warn('[TEMPLATE] errore caricamento', p, err);
@@ -180,7 +182,9 @@ const PumpStructureGenerator = () => {
 
     // se arrivo qui significa che tutti i tentativi sono falliti
     console.warn('[TEMPLATE] impossibile caricare automaticamente il template. Ultimo errore:', lastError);
-    showMessage(`Impossibile caricare automaticamente ${NAME}. Controlla che il file sia nella root del sito e che il nome sia esatto. Se non vuoi pubblicarlo, caricalo manualmente con il controllo sottostante.`, 'warning', 12000);
+    if (showMsg) {
+      showMessage(`Impossibile caricare ${NAME}. Controlla che il file sia nella root del sito.`, 'warning', 8000);
+    }
   };
 
   // Carica automaticamente il template all'avvio
