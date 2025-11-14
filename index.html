@@ -640,10 +640,14 @@ const PumpStructureGenerator = () => {
 
   // Costruisci nuovo AoA a partire dal templateAOA: inserisci generatedRows a partire dalla riga 3 (index 2)
   const baseAOA = (templateAOA || []).map(r => Array.isArray(r) ? r.slice() : []);
-  // preserva le prime due righe del template (header e riga successiva) quando possibile
-  const insertAt = 2; // 0-based index -> riga 3 nel file Excel
+  // preserva solo la riga header del template (riga 1)
+  const insertAt = 1; // 0-based index -> riga 2 nel file Excel
   const safeInsertAt = Math.min(insertAt, baseAOA.length);
   const prefix = baseAOA.slice(0, safeInsertAt);
+  
+  // Aggiungi una riga vuota di separazione tra header e strutture generate
+  const emptyRow = new Array(headers.length).fill('');
+  
   // determina il blocco esistente di righe template (righe non-vuote) a partire da insertAt
   let existingTemplateRowsCount = 0;
   for (let i = safeInsertAt; i < baseAOA.length; i++) {
@@ -653,7 +657,7 @@ const PumpStructureGenerator = () => {
     existingTemplateRowsCount++;
   }
   const suffix = baseAOA.slice(safeInsertAt + existingTemplateRowsCount);
-  const newAOA = prefix.concat(generatedRows, suffix);
+  const newAOA = prefix.concat([emptyRow], generatedRows, suffix);
 
         // usa il nuovo AOA come foglio da esportare
         const worksheet = XLSX.utils.aoa_to_sheet(newAOA);
