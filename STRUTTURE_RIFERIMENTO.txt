@@ -1,0 +1,164 @@
+===============================================
+STRUTTURE PER L'ESPORTAZIONE DEI FILE
+===============================================
+
+Pompe con Inverter
+------------------
+[NomePompa].Command.Automatic
+[NomePompa].Command.Manual
+[NomePompa].Command.Cmd_Man
+[NomePompa].Command.Inv_Speed_Man
+[NomePompa].Status.Ready
+[NomePompa].Status.Running
+[NomePompa].Status.Automatic
+[NomePompa].Status.Manual
+[NomePompa].Status.Selector
+[NomePompa].Monitor.Frequency_Fbk
+[NomePompa].Monitor.Current
+[NomePompa].Monitor.Power
+[NomePompa].Monitor.Voltage
+[NomePompa].Worktime.Reset
+[NomePompa].Worktime.Total.Hour
+[NomePompa].Worktime.Total.Min
+[NomePompa].Worktime.Partial.Hour
+[NomePompa].Worktime.Partial.Min
+
+Per gli indirizzi di questa struttura incrementare i seguenti valori all'indirizzo iniziale per generare gli indirizzi di ogni parametro della struttura : 
+256,0
+256,1
+256,3
+258,0
+266,0
+266,2
+266,3
+266,4
+266,5
+268,0
+272,0
+276,0
+280,0
+300,0
+302,0
+306,0
+310,0
+314,0
+
+Pompe senza Inverter
+--------------------
+[NomePompa].Command.Automatic
+[NomePompa].Command.Manual
+[NomePompa].Command.Cmd_Man
+[NomePompa].Status.Ready
+[NomePompa].Status.Running
+[NomePompa].Status.Automatic
+[NomePompa].Status.Manual
+[NomePompa].Status.Selector
+[NomePompa].Worktime.Reset
+[NomePompa].Worktime.Total.Hour
+[NomePompa].Worktime.Total.Min
+[NomePompa].Worktime.Partial.Hour
+[NomePompa].Worktime.Partial.Min
+
+Per gli indirizzi di questa struttura incrementare i seguenti valori all'indirizzo iniziale per generare gli indirizzi di ogni parametro della struttura : 
+256,0
+256,1
+256,3
+266,0
+266,2
+266,3
+266,4
+266,5
+300,0
+302,0
+306,0
+310,0
+314,0
+
+Valvole con Inverter
+--------------------
+[NomeValvola].Command.Automatic
+[NomeValvola].Command.Manual
+[NomeValvola].Command.Cmd_Man_Open
+[NomeValvola].Command.Cmd_Man_Close
+[NomeValvola].Status.Ready
+[NomeValvola].Status.Opening
+[NomeValvola].Status.Closing
+[NomeValvola].Status.Automatic
+[NomeValvola].Status.Manual
+[NomeValvola].Status.Selector
+[NomeValvola].Status.Open
+[NomeValvola].Status.Close
+[NomeValvola].Worktime.Reset
+[NomeValvola].Worktime.Total.Hour
+[NomeValvola].Worktime.Total.Min
+[NomeValvola].Worktime.Partial.Hour
+[NomeValvola].Worktime.Partial.Min
+
+Per gli indirizzi di questa struttura incrementare i seguenti valori all'indirizzo iniziale per generare gli indirizzi di ogni parametro della struttura : 
+256,0
+256,1
+256,3
+258,0
+266,0
+266,2
+266,3
+266,4
+266,5
+268,0
+272,0
+276,0
+
+Valvole senza Inverter
+----------------------
+[NomeValvola].Command.Automatic
+[NomeValvola].Command.Manual
+[NomeValvola].Command.Cmd_Man
+[NomeValvola].Status.Ready
+[NomeValvola].Status.Automatic
+[NomeValvola].Status.Manual
+[NomeValvola].Status.Selector
+[NomeValvola].Worktime.Reset
+[NomeValvola].Worktime.Total.Hour
+[NomeValvola].Worktime.Total.Min
+[NomeValvola].Worktime.Partial.Hour
+[NomeValvola].Worktime.Partial.Min
+
+Per gli indirizzi di questa struttura incrementare i seguenti valori all'indirizzo iniziale per generare gli indirizzi di ogni parametro della struttura : 
+256,0
+256,1
+256,3
+266,0
+266,2
+266,3
+266,4
+266,5
+300,0
+302,0
+306,0
+310,0
+314,0
+
+
+Analogiche
+----------
+[NomeAnalogica]Output.Actual
+[NomeAnalogica]Output.Min
+[NomeAnalogica]Output.Max
+[NomeAnalogica]Limit.H
+[NomeAnalogica]Limit.L
+
+Per gli indirizzi di questa struttura incrementare i seguenti valori all'indirizzo iniziale per generare gli indirizzi per ogni parametro della struttura : 
+518,0
+522,0
+526,0
+530,0
+534,0
+
+===============================================
+NOTE:
+- Sostituire [NomePompa], [NomeValvola], o [NomeAnalogica] con il nome specifico del componente
+- Gli indirizzi vengono calcolati automaticamente dal sito sommando gli offset definiti all'indirizzo iniziale
+- Le analogiche non hanno la configurazione "con inverter"
+- Gli indirizzi finali che andranno nella struttura che andro ad esportare dovranno essere : per gli address devi scrivere : DB"numero DB inserito dall utente".DBW"indirizzo numerico che genera come ha fatto fino  ad ora" ( se il data type è "Word" o "Int"), DB"numero DB inserito dall utente".DBX"indirizzo numerico che genera come ha fatto fino  ad ora" ( se il data type è "Bool"), DB"numero DB inserito dall utente".DBD"indirizzo numerico che genera come ha fatto fino  ad ora" ( se il data type è "Real" o "DInt" o "DWord" )
+- mettere nel sito un opzione che : SOLO NEGLI INDIRIZZI NUMERICI mi faccia mettere il punto o la virgola ( ad esempio : 100,0 o 100.0 ), NON DEVI MODIFICARE IL "." c'è DOPO "DB"num.DB"
+===============================================

@@ -1,6 +1,4 @@
-# Script helper per fare il push delle modifiche al repository remoto
-# IMPORTANTE: esegui questo script nella tua macchina dove hai le credenziali Git configurate.
-# Apri PowerShell come utente e lancia: .\push_changes.ps1
+# Script migliorato per automatizzare il push su GitHub con gestione degli errori e autenticazione
 
 # Vai nella cartella del progetto
 Set-Location -Path "D:\Generatore_Strutture\sito"
@@ -11,36 +9,34 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
   exit 1
 }
 
-# Mostra stato
-Write-Output "Git status prima delle modifiche:"
-git status
+# Verifica che il remote sia configurato
+$remote = git remote -v
+if (-not $remote) {
+  Write-Error "Nessun remote configurato. Aggiungi un remote con: git remote add origin <URL del tuo repository>."
+  exit 1
+}
 
 # Aggiunge tutti i file modificati
 git add .
 
-# Se non ci sono cambi da commit, informa e termina
+# Verifica se ci sono modifiche da committare
 $diff = git status --porcelain
 if (-not $diff) {
   Write-Output "Nessuna modifica da pushare."
   exit 0
 }
 
-# Commit (modifica il testo del commit se vuoi)
-$commitMsg = Read-Host "Messaggio di commit (premi Invio per usare 'Aggiornamento da local')"
-if (-not $commitMsg) { $commitMsg = "Aggiornamento da local" }
-
+# Commit automatico con messaggio dinamico (usa timestamp se non specificato)
+$timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+$commitMsg = "Aggiornamento automatico - $timestamp"
 git commit -m "$commitMsg"
 
-# Verifica remote
-$remote = git remote -v
-Write-Output "Remote configurati:`n$remote"
-
-# Push sul branch master (cambia branch se usi altro)
-Write-Output "Eseguo git push origin master..."
+# Push sul branch principale
+Write-Output "Eseguo git push origin main..."
 try {
-  git push origin master
-  Write-Output "Push completato. Controlla la pagina GitHub per il deploy su Cloudflare Pages."
+  git push origin main
+  Write-Output "Push completato con successo!"
 } catch {
   Write-Error "Errore durante il push: $_.Exception.Message"
-  Write-Output "Se il repository remoto non è impostato, aggiungilo con: git remote add origin https://github.com/TUO-USERNAME/NOME-REPO.git"
+  exit 1
 }

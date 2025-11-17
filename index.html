@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Generatore Pompe - Test</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>Generatore Strutture Pompe e Valvole</title>
+  <!-- v1.2 - Import fix deployment -->
+  <script src="https://cdn.tailwindcss.com?v=1.2"></script>
   <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/lucide@0.294.0/dist/umd/lucide.min.js"></script>
@@ -55,12 +56,46 @@ window.addEventListener('unhandledrejection', (ev) => {
   }
 });
 
+// Definizione della funzione showMessage per mostrare messaggi nella console o nell'interfaccia utente
+function showMessage(message, type = 'info') {
+  console.log(`[${type.toUpperCase()}] ${message}`);
+}
+
+// Definizione della funzione computeHeaderMap per calcolare la mappa degli header
+function computeHeaderMap(headers) {
+  const normalize = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const map = {};
+  headers.forEach((header, index) => {
+    const key = normalize(header);
+    map[key] = index;
+  });
+
+  // helper to find first matching normalized key from a list
+  const idxOf = (names) => {
+    for (const n of names) {
+      const k = normalize(n);
+      if (map[k] !== undefined) return map[k];
+    }
+    return -1;
+  };
+
+  return Object.assign({}, map, {
+    tagIndex: idxOf(['Tag Name', 'Tag', 'TagName']),
+    dataTypeIdx: idxOf(['Data type', 'Datatype', 'DataType']),
+    addrIndex: idxOf(['Address PLC', 'Address', 'AddressPLC', 'Indirizzo']),
+    accessIdx: idxOf(['ACCESSO', 'Accesso', 'Access']),
+    commentIdx: idxOf(['Comment', 'Commento', 'Note'])
+  });
+}
+
 const PumpStructureGenerator = () => {
   const [loggedIn, setLoggedIn] = useState(false);
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [componentType, setComponentType] = useState('pump');
   const [hasInverter, setHasInverter] = useState(false);
+  const [dbNumber, setDbNumber] = useState('1');
+  const [addrDecimalSep, setAddrDecimalSep] = useState(',');
   const [tableData, setTableData] = useState('');
   const [structure, setStructure] = useState([]);
   const [templateHeader, setTemplateHeader] = useState(null);
@@ -70,6 +105,7 @@ const PumpStructureGenerator = () => {
   const [templateIssues, setTemplateIssues] = useState([]);
   const [templateAOA, setTemplateAOA] = useState(null);
   const [templateHeaderMap, setTemplateHeaderMap] = useState(null);
+  const [templateWorkbook, setTemplateWorkbook] = useState(null);
   const [previewRows, setPreviewRows] = useState([]);
   const [importedRows, setImportedRows] = useState([]);
   const [exportFilename, setExportFilename] = useState('Struttura');
@@ -90,7 +126,7 @@ const PumpStructureGenerator = () => {
   };
 
   // Funzione per caricare il template (prova percorsi alternativi e log chiari)
-  const tryLoadTemplate = async () => {
+  const tryLoadTemplate = async (showMsg = false) => {
     const NAME = 'template_excel.xlsx';
     // prova una lista di possibili URL (relative e assolute)
     const candidatePaths = [
@@ -111,7 +147,8 @@ const PumpStructureGenerator = () => {
           continue;
         }
         const ab = await res.arrayBuffer();
-        const wb = XLSX.read(ab, { type: 'array' });
+        const wb = XLSX.read(ab, { type: 'array', cellStyles: true });
+        setTemplateWorkbook(wb); // Salva il workbook originale con formattazione
         const first = wb.Sheets[wb.SheetNames[0]];
         const aoa = XLSX.utils.sheet_to_json(first, { header: 1, raw: false });
         if (!aoa || aoa.length === 0) {
@@ -145,6 +182,7 @@ const PumpStructureGenerator = () => {
           'Tag Name','Data type','Address PLC','ACCESSO','Comment','Stato','RaW min','RaW maX','Unità di misura','Scala min','Scala maX','Modifiche'
         ];
         const normalize = (s) => String(s || '').normalize('NFD').replace(/\u0300-\u036f/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g,'');
+
         const hdrNorm = header.map(h => normalize(h));
         const missing = [];
         required.forEach(r => { if (!hdrNorm.some(hn => hn === normalize(r))) missing.push(r); });
@@ -152,7 +190,9 @@ const PumpStructureGenerator = () => {
         setTemplateIssues(missing);
 
         console.log('[TEMPLATE] Caricato con successo da', p, { header, rowsCount: rows.length, missing });
-        showMessage(`Template caricato automaticamente da ${p} (${rows.length} righe).`, missing.length === 0 ? 'success' : 'warning', 5000);
+        if (showMsg) {
+          showMessage(`Template caricato da ${p} (${rows.length} righe).`, missing.length === 0 ? 'success' : 'warning', 5000);
+        }
         return; // successo, non provare altri paths
       } catch (err) {
         console.warn('[TEMPLATE] errore caricamento', p, err);
@@ -163,8 +203,16 @@ const PumpStructureGenerator = () => {
 
     // se arrivo qui significa che tutti i tentativi sono falliti
     console.warn('[TEMPLATE] impossibile caricare automaticamente il template. Ultimo errore:', lastError);
-    showMessage(`Impossibile caricare automaticamente ${NAME}. Controlla che il file sia nella root del sito e che il nome sia esatto. Se non vuoi pubblicarlo, caricalo manualmente con il controllo sottostante.`, 'warning', 12000);
+    if (showMsg) {
+      showMessage(`Impossibile caricare ${NAME}. Controlla che il file sia nella root del sito.`, 'warning', 8000);
+    }
   };
+
+  // Non caricare più il template automaticamente - non è necessario
+  // useEffect(() => {
+  //   tryLoadTemplate();
+  // }, []);
+
   
   const handleLogin = (e) => {
     e.preventDefault();
@@ -217,8 +265,188 @@ const PumpStructureGenerator = () => {
     }
   };
 
+  // Funzione per leggere il file importato (Excel o CSV)
+  const readImportedFile = (file) => {
+    if (!file) {
+      console.error('[IMPORT] Nessun file selezionato.');
+      return;
+    }
+
+    console.log('[IMPORT] File selezionato:', file.name, 'Tipo:', file.type, 'Dimensione:', file.size);
+
+    const reader = new FileReader();
+    
+    reader.onerror = (error) => {
+      console.error('[IMPORT] Errore durante la lettura del file:', error);
+      showMessage('Errore durante la lettura del file.', 'error');
+    };
+
+    reader.onload = (evt) => {
+      try {
+        console.log('[IMPORT] File caricato, elaborazione in corso...');
+        let data;
+        if (file.name.endsWith('.csv')) {
+          // Gestione file CSV
+          const text = evt.target.result;
+          console.log('[IMPORT] Contenuto CSV:', text.substring(0, 200));
+          const rows = text.split(/\r\n|\n/)
+                         .filter(row => row.trim().length > 0);
+          data = rows.map(row => row.split(/[,;\t]/));
+          console.log('[IMPORT] Righe CSV parsate:', data.length);
+        } else {
+          // Gestione file Excel (.xlsx, .xls)
+          console.log('[IMPORT] Lettura file Excel...');
+          const workbook = XLSX.read(evt.target.result, { type: 'array' });
+          console.log('[IMPORT] Fogli disponibili:', workbook.SheetNames);
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          
+          // Converti il foglio Excel in array di righe
+          const excelRows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+          console.log('[IMPORT] Righe Excel totali:', excelRows.length);
+          console.log('[IMPORT] Prima riga (header):', excelRows[0]);
+          console.log('[IMPORT] Seconda riga (esempio):', excelRows[1]);
+          
+          // NON rimuovere l'intestazione: leggi dalla prima riga in poi
+          data = excelRows
+            .filter(row => row && row.length > 0 && row.some(cell => cell !== undefined && String(cell).trim() !== ''));
+          console.log('[IMPORT] Righe filtrate:', data.length);
+        }
+        
+        if (!data || data.length === 0) {
+          console.error('[IMPORT] Nessun dato valido trovato nel file importato.');
+          showMessage('Il file importato non contiene dati validi.', 'error');
+          return;
+        }
+
+        // Genera la struttura per ciascuna pompa utilizzando solo il nome e l'indirizzo iniziale
+        const numericFrom = (s) => {
+          if (!s) return null;
+          const m = String(s).match(/(\d+[,.]?\d*)/);
+          if (!m) return null;
+          return parseFloat(m[1].replace(',', '.'));
+        };
+
+        const rawStructures = data.map((row, index) => {
+          const nome = (row[0] || '').toString().trim();
+          const indirizzo = row[2] !== undefined ? row[2].toString().trim() : '';
+          console.log(`[IMPORT] Riga ${index}: Nome='${nome}', Indirizzo='${indirizzo}'`);
+          return {
+            id: index + 1,
+            nome: nome,
+            indirizzo: indirizzo,
+            hasValidAddress: numericFrom(indirizzo) !== null
+          };
+        });
+
+        console.log('[IMPORT] Strutture grezze lette dal file:', rawStructures);
+
+        // Filtra righe non valide: nome non vuoto E indirizzo numerico valido
+        const structures = rawStructures.filter(s => {
+          return s.nome && s.nome.length > 0 && s.hasValidAddress;
+        });
+
+        console.log('[IMPORT] Strutture filtrate (valide):', structures);
+
+        if (structures.length === 0) {
+          console.warn('[IMPORT] Nessuna struttura valida trovata. Verifica il formato del file.');
+          showMessage('Nessuna struttura valida trovata nel file. Assicurati che il file contenga:\n- Colonna 1: Nome pompa/valvola\n- Colonna 3: Indirizzo iniziale (formato numerico, es. 100 o 100,0)', 'warning');
+          return;
+        }
+
+        // Converti la struttura in formato leggibile per l'anteprima
+        const formattedData = structures.map(structure => {
+          return `ID: ${structure.id}\nNome: ${structure.nome}\nIndirizzo: ${structure.indirizzo}\n`;
+        }).join('\n---\n');
+
+        console.log('[IMPORT] Dati formattati:', formattedData);
+
+        // Imposta i dati nella textarea
+        setTableData(formattedData);
+        setImportedRows(structures);
+
+        // Non generiamo automaticamente la struttura all'import.
+        setStructure([]);
+        setPreviewRows([]);
+        console.log('[IMPORT] Importazione completata con successo.');
+        // Messaggio semplificato richiesto dall'utente
+        showMessage('File Excel importato con successo.', 'success');
+      } catch (error) {
+        console.error('[IMPORT] Errore durante la lettura del file:', error);
+        console.error('[IMPORT] Stack trace:', error.stack);
+        showMessage('Errore durante la lettura del file: ' + error.message, 'error');
+      }
+    };
+
+    if (file.name.endsWith('.csv')) {
+      reader.readAsText(file);
+    } else {
+      reader.readAsArrayBuffer(file);
+    }
+  };
+
+  // Funzione per leggere il file template
+  const readTemplateFile = (file) => {
+    if (!file) {
+      console.error('[TEMPLATE] Nessun file template selezionato.');
+      return;
+    }
+
+    console.log('[TEMPLATE] File template selezionato:', file.name);
+
+    const reader = new FileReader();
+    
+    reader.onerror = (error) => {
+      console.error('[TEMPLATE] Errore durante la lettura del template:', error);
+      showMessage('Errore durante la lettura del template.', 'error');
+    };
+
+    reader.onload = (evt) => {
+      try {
+        console.log('[TEMPLATE] Template caricato, elaborazione in corso...');
+        const ab = evt.target.result;
+        const wb = XLSX.read(ab, { type: 'array', cellStyles: true });
+        setTemplateWorkbook(wb); // Salva il workbook originale con formattazione
+        const first = wb.Sheets[wb.SheetNames[0]];
+        const aoa = XLSX.utils.sheet_to_json(first, { header: 1, raw: false });
+        
+        if (!aoa || aoa.length === 0) {
+          showMessage('Il template è vuoto o non valido.', 'error');
+          return;
+        }
+
+        const header = aoa[0].map(h => (h === undefined ? '' : String(h)));
+        setTemplateHeader(header);
+        try {
+          setTemplateHeaderMap(computeHeaderMap(header));
+        } catch (e) { setTemplateHeaderMap(null); }
+
+        const aoaNormalized = aoa.map(r => (r || []).map(c => (c === undefined ? '' : String(c))));
+        setTemplateAOA(aoaNormalized);
+
+        const rows = [];
+        for (let i = 1; i < aoaNormalized.length; i++) {
+          const r = aoaNormalized[i];
+          const allEmpty = (!r || r.length === 0) || r.every(cell => cell === undefined || String(cell).trim() === '');
+          if (allEmpty) break;
+          rows.push(r.map(c => (c === undefined ? '' : String(c))));
+        }
+        if (rows.length > 0) setTemplateRows(rows);
+
+        setTemplateFilename(file.name);
+
+        console.log('[TEMPLATE] Template caricato con successo:', { header, rowsCount: rows.length });
+        showMessage(`Template caricato con successo: ${file.name} (${rows.length} righe).`, 'success');
+      } catch (error) {
+        console.error('[TEMPLATE] Errore durante la lettura del template:', error);
+        showMessage('Errore durante la lettura del template: ' + error.message, 'error');
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
+  };
+
   // Costruisce sia la struttura flat (array di oggetti) che le righe AoA da inserire nel template,
-  // a partire dalle pompe fornite (array di { id, nome, indirizzo }).
+  // a partire dalle pompe fornite (array di { id, nome, indirizzo }). 
   // Questa versione segue rigidamente l'ordine e il numero di campi definiti in STRUCTURE_TEMPLATES
   // per la combinazione device+inverter scelta, calcola gli indirizzi con `addressFromSequence`
   // e mappa i campi nelle colonne del template (se presenti) o nei default headers.
@@ -239,7 +467,32 @@ const PumpStructureGenerator = () => {
     const flat = [];
     const aoa = [];
 
-    const seqKey = `${componentType === 'pump' ? 'pump' : 'valve'}_${hasInverter ? 'inv' : 'noinv'}`;
+    // Helper: formatta l'indirizzo nel formato DB{n}.DBW/DBX/DBD a seconda del tipo dati
+    const formatAddress = (addrStr, dbNum, dataType) => {
+      if (!addrStr) return '';
+      const sep = addrDecimalSep === '.' ? '.' : ',';
+      const parsed = parseAddr(String(addrStr).includes(',') || String(addrStr).includes('.') ? addrStr : `${addrStr},0`);
+      const word = parsed.word || 0;
+      const bit = parsed.bit || 0;
+      const dt = String(dataType || '').toLowerCase();
+      const db = String(dbNum || '').trim();
+      if (!db) return `${word}${sep}${bit}`;
+
+      if (dt === 'bool') {
+        // bit address (use selected separator between word and bit)
+        return `DB${db}.DBX${word}${sep}${bit}`;
+      }
+      if (dt === 'word' || dt === 'int') {
+        return `DB${db}.DBW${word}${sep}0`;
+      }
+      if (dt === 'real' || dt === 'dint' || dt === 'dword') {
+        return `DB${db}.DBD${word}${sep}0`;
+      }
+      // default: use DBW
+      return `DB${db}.DBW${word}${sep}0`;
+    };
+
+    const seqKey = componentType === 'analogiche' ? 'analogiche' : `${componentType === 'pump' ? 'pump' : 'valve'}_${hasInverter ? 'inv' : 'noinv'}`;
     const tmpl = STRUCTURE_TEMPLATES[seqKey] || [];
 
     // rows per pump = number of template fields for this device type
@@ -261,7 +514,8 @@ const PumpStructureGenerator = () => {
         const flatItem = {
           name: tagName,
           type: tmeta.type || '',
-          address: addr,
+          addressRaw: addr,
+          address: formatAddress(addr, dbNumber, tmeta.type || ''),
           access: tmeta.access || '',
           comment: tmeta.comment || '',
           stato: '',
@@ -343,36 +597,10 @@ const PumpStructureGenerator = () => {
       setPreviewRows(aoa);
       console.log('[GENERATE] flat length:', flat.length, 'aoa rows:', aoa.length);
 
-      // Se abbiamo un template caricato in memoria, incolla le righe generate nel template
+      // Se abbiamo un template caricato in memoria, le righe sono pronte per l'export
       if (templateAOA && templateHeader && templateHeader.length) {
-        try {
-          const baseAOA = (templateAOA || []).map(r => Array.isArray(r) ? r.slice() : []);
-          const insertAt = 2; // inserisci a partire dalla riga 3
-          const safeInsertAt = Math.min(insertAt, baseAOA.length);
-
-          // conta le righe non vuote esistenti nel blocco template a partire da safeInsertAt
-          let existingTemplateRowsCount = 0;
-          for (let i = safeInsertAt; i < baseAOA.length; i++) {
-            const r = baseAOA[i] || [];
-            const allEmpty = (!r || r.length === 0) || r.every(cell => cell === undefined || String(cell).trim() === '');
-            if (allEmpty) break;
-            existingTemplateRowsCount++;
-          }
-
-          const prefix = baseAOA.slice(0, safeInsertAt);
-          const suffix = baseAOA.slice(safeInsertAt + existingTemplateRowsCount);
-          const newAOA = prefix.concat(aoa, suffix);
-
-          setTemplateAOA(newAOA);
-          // aggiorna templateRows con il blocco appena incollato
-          setTemplateRows(aoa.slice());
-
-          showMessage(`Righe incollate nel template in memoria (${flat.length} righe). Usa Esporta per scaricare il file.`, 'success', 5000);
-          console.log('[GENERATE] templateAOA updated in memory. new rows:', aoa.length, 'existingBlockReplaced:', existingTemplateRowsCount);
-        } catch (errInner) {
-          console.error('Errore durante l\'incollamento delle righe nel template in memoria:', errInner);
-          showMessage('Generazione completata ma non è stato possibile incollare nel template in memoria. Controlla la console.', 'warning');
-        }
+        console.log('[GENERATE] Strutture pronte per essere inserite nel template dalla riga 3');
+        showMessage(`Generata struttura per ${pumps.length} pompe (${flat.length} righe totali). Clicca "Esporta Excel" per salvare nel template.`, 'success', 4000);
       } else {
         showMessage(`Generata struttura per ${pumps.length} pompe (${flat.length} righe totali). Anteprima pronta.`, 'success', 4000);
       }
@@ -405,7 +633,14 @@ const PumpStructureGenerator = () => {
       const pompeMap = {};
       const pumpNamesOrdered = [];
       structure.forEach(item => {
-        const pompeName = (item.name && item.name.split ? item.name.split('.')[0] : String(item.name || ''));
+        let pompeName = (item.name && item.name.split ? item.name.split('.')[0] : String(item.name || ''));
+        
+        // Per le analogiche, rimuovi il suffisso Output/Limit per raggruppare correttamente
+        // Es: "Analogica1Output" e "Analogica1Limit" diventano entrambi "Analogica1"
+        if (componentType === 'analogiche') {
+          pompeName = pompeName.replace(/Output$|Limit$/, '');
+        }
+        
         if (!pompeMap[pompeName]) {
           pompeMap[pompeName] = [];
           pumpNamesOrdered.push(pompeName);
@@ -453,71 +688,50 @@ const PumpStructureGenerator = () => {
         }
 
         // Debug: log principali prima di creare AOA
-        console.log('[EXPORT] templateAOA rows:', (templateAOA || []).length, 'templateRows:', (templateRows || []).length, 'generatedRows:', generatedRows.length, 'pumpNames:', pumpNames);
+        console.log('[EXPORT] generatedRows:', generatedRows.length, 'pumpNames:', pumpNames);
         if (!generatedRows || generatedRows.length === 0) {
-          showMessage('Attenzione: non ci sono righe generate da inserire nel template. Verifica di aver cliccato "Genera Struttura" e che i dati importati siano validi.', 'warning', 8000);
-          console.warn('[EXPORT] Nessuna riga generata, aborting template export.');
+          showMessage('Attenzione: non ci sono righe generate. Verifica di aver cliccato "Genera Struttura" e che i dati importati siano validi.', 'warning', 8000);
+          console.warn('[EXPORT] Nessuna riga generata, aborting export.');
           return;
         }
 
-  // Costruisci nuovo AoA a partire dal templateAOA: inserisci generatedRows a partire dalla riga 3 (index 2)
-  const baseAOA = (templateAOA || []).map(r => Array.isArray(r) ? r.slice() : []);
-  // preserva le prime due righe del template (header e riga successiva) quando possibile
-  const insertAt = 2; // 0-based index -> riga 3 nel file Excel
-  const safeInsertAt = Math.min(insertAt, baseAOA.length);
-  const prefix = baseAOA.slice(0, safeInsertAt);
-  // determina il blocco esistente di righe template (righe non-vuote) a partire da insertAt
-  let existingTemplateRowsCount = 0;
-  for (let i = safeInsertAt; i < baseAOA.length; i++) {
-    const r = baseAOA[i] || [];
-    const allEmpty = (!r || r.length === 0) || r.every(cell => cell === undefined || String(cell).trim() === '');
-    if (allEmpty) break;
-    existingTemplateRowsCount++;
-  }
-  const suffix = baseAOA.slice(safeInsertAt + existingTemplateRowsCount);
-  const newAOA = prefix.concat(generatedRows, suffix);
-
-        // usa il nuovo AOA come foglio da esportare
-        const worksheet = XLSX.utils.aoa_to_sheet(newAOA);
-        worksheet['!merges'] = merges;
-
-        // Applica stili e colonne come prima
-        for (let c = 0; c < headers.length; c++) {
-          const cell = XLSX.utils.encode_cell({ c, r: 0 });
-          if (worksheet[cell]) worksheet[cell].s = headerStyle;
-        }
-        const cols = headers.map((h, i) => {
-          if (i === 0 || i === 4 || i === headers.length - 1) return { wch: 40 };
-          if (i === 2) return { wch: 20 };
-          if (i === 1) return { wch: 18 };
-          return { wch: 12 };
-        });
-        worksheet['!cols'] = cols;
-
+        // Crea il file Excel con header + riga vuota + dati
+        // Usa l'intestazione del template se presente, altrimenti usa le headers di default
+        const finalHeaders = (templateHeader && templateHeader.length) ? templateHeader : ['Tag Name', 'Data type', 'Address PLC', 'ACCESSO', 'Comment', 'Stato', 'RaW min', 'RaW maX', 'Unità di misura', 'Scala min', 'Scala maX', 'Modifiche'];
+        const emptyRow = new Array(finalHeaders.length).fill('');
+        const allRows = [finalHeaders, emptyRow].concat(generatedRows);
+        
+        const worksheet = XLSX.utils.aoa_to_sheet(allRows);
+        
+        // Imposta larghezze colonne
+        worksheet['!cols'] = [
+          { wch: 40 },  // Tag Name
+          { wch: 18 },  // Data type
+          { wch: 20 },  // Address PLC
+          { wch: 12 },  // ACCESSO
+          { wch: 40 },  // Comment
+          { wch: 12 },  // Stato
+          { wch: 12 },  // RaW min
+          { wch: 12 },  // RaW maX
+          { wch: 18 },  // Unità di misura
+          { wch: 12 },  // Scala min
+          { wch: 12 },  // Scala maX
+          { wch: 40 }   // Modifiche
+        ];
+        
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Struttura');
 
-        // nome file: base sul template ma con suffisso export per non sovrascrivere
+        // Esporta il file
         try {
-          // usa il nome fornito dall'utente (exportFilename) o 'Struttura' come default
           let baseName = (exportFilename && String(exportFilename).trim()) ? String(exportFilename).trim() : 'Struttura';
           if (baseName.toLowerCase().endsWith('.xlsx')) baseName = baseName.slice(0, -5);
-          // se l'utente ha scelto lo stesso nome del template, aggiungi un suffisso per sicurezza
-          try {
-            if (templateFilename) {
-              const tplBase = String(templateFilename).replace(/\.xlsx$/i, '');
-              if (tplBase.toLowerCase() === baseName.toLowerCase()) {
-                baseName = baseName + '-filled';
-              }
-            }
-          } catch (e) { /* ignore */ }
           const outName = baseName + '.xlsx';
           XLSX.writeFile(workbook, outName);
-          showMessage('Struttura esportata nel template: ' + outName, 'success');
+          showMessage('File esportato con successo: ' + outName, 'success');
         } catch (errWrite) {
-          console.error('Errore durante writeFile su template:', errWrite);
-          try { XLSX.writeFile(workbook, 'Struttura.xlsx'); } catch(e){ console.error('Secondo tentativo writeFile fallito:', e); }
-          showMessage('Struttura esportata con successo!', 'success');
+          console.error('Errore durante export:', errWrite);
+          showMessage('Errore durante l\'esportazione: ' + errWrite.message, 'error');
         }
 
         // abbiamo già scritto il file: terminiamo qui
@@ -533,10 +747,26 @@ const PumpStructureGenerator = () => {
         // Output structure rows directly (no pump title rows)
         pumpNames.forEach((pompeName, pIdx) => {
           pompeMap[pompeName].forEach(item => {
+            // format address based on data type and DB number
+            const itAddr = item.address || item.addressRaw || '';
+            const dt = String(item.type || '').toLowerCase();
+            let addrFormatted = itAddr;
+            const db = String(dbNumber || '').trim();
+            const sep = addrDecimalSep === '.' ? '.' : ',';
+            // if address already formatted (starts with DB), keep it as-is
+            if (!/^\s*DB\d+/i.test(String(itAddr)) && db) {
+              const parsed = parseAddr((String(itAddr).includes(',') || String(itAddr).includes('.')) ? itAddr : `${itAddr},0`);
+              const w = parsed.word || 0;
+              const b = parsed.bit || 0;
+              if (dt === 'bool') addrFormatted = `DB${db}.DBX${w}${sep}${b}`;
+              else if (dt === 'word' || dt === 'int') addrFormatted = `DB${db}.DBW${w}${sep}0`;
+              else if (dt === 'real' || dt === 'dint' || dt === 'dword') addrFormatted = `DB${db}.DBD${w}${sep}0`;
+              else addrFormatted = `DB${db}.DBW${w}${sep}0`;
+            }
             aoa.push([
               item.name || '',
               item.type || '',
-              item.address || '',
+              addrFormatted,
               item.access || '',
               item.comment || '',
               item.stato || '',
@@ -674,7 +904,26 @@ const PumpStructureGenerator = () => {
                   >
                     <option value="pump">Pompa</option>
                     <option value="valve">Valvola</option>
+                    <option value="analogiche">Analogiche</option>
                   </select>
+                </div>
+
+                <div className="mt-2">
+                  <label className="block text-sm font-medium mb-1">Numero DB</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={dbNumber}
+                    onChange={(e) => setDbNumber(String(e.target.value))}
+                    className="w-full p-2 border rounded"
+                  />
+                </div>
+                <div className="mt-2">
+                  <label className="block text-sm font-medium mb-1">Separatore decimale indirizzi</label>
+                  <div className="flex gap-2 items-center">
+                    <label className="text-sm"><input type="radio" name="addrSep" value="," checked={addrDecimalSep === ','} onChange={() => setAddrDecimalSep(',')} /> Virgola (,)</label>
+                    <label className="text-sm"><input type="radio" name="addrSep" value="." checked={addrDecimalSep === '.'} onChange={() => setAddrDecimalSep('.')} /> Punto (.)</label>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -709,29 +958,6 @@ const PumpStructureGenerator = () => {
                     </label>
                   </div>
 
-                  {/* mostra il template caricato (fisso) */}
-                  {templateFilename && (
-                    <div className="mt-2 text-sm text-gray-700">
-                      Template attivo: <strong>{templateFilename}</strong> (usato come base per l'export)
-                    </div>
-                  )}
-                  {!templateFilename && (
-                    <div className="mt-2 text-sm text-gray-700">
-                      <label className="block mb-1">Template non caricato automaticamente? Caricalo manualmente:</label>
-                      <input type="file" accept=".xlsx,.xls,.ods,.csv" onChange={(e) => { const f = e.target.files[0]; if (f) readTemplateFile(f); }} />
-                      <div className="text-xs text-gray-500 mt-1">Se preferisci, avvia un server locale (es. <code>python -m http.server 8000</code>) e ricarica la pagina per il caricamento automatico.</div>
-                    </div>
-                  )}
-                  {templateFilename && !templateValid && (
-                    <div className="mt-3 p-3 rounded bg-yellow-50 border border-yellow-200 text-sm text-yellow-800">
-                      <strong>Attenzione:</strong> l'header del template non contiene tutte le colonne richieste. Colonne mancanti:
-                      <ul className="list-disc ml-5 mt-2">
-                        {templateIssues.map((m, i) => <li key={i}>{m}</li>)}
-                      </ul>
-                      Assicurati che il file `template_excel.xlsx` contenga le colonne obbligatorie e riprova.
-                    </div>
-                  )}
-
                   {/* Preview moved to the main preview panel on the right. */}
 
                   <div className="mt-4">
@@ -745,19 +971,21 @@ const PumpStructureGenerator = () => {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-1">Configurazione Inverter</label>
-                  <div className="flex items-center gap-2">
-                    <input 
-                      type="checkbox" 
-                      id="hasInverter" 
-                      checked={hasInverter} 
-                      onChange={(e) => setHasInverter(e.target.checked)} 
-                      className="w-4 h-4" 
-                    />
-                    <label htmlFor="hasInverter">Dotato di Inverter</label>
+                {componentType !== 'analogiche' && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Configurazione Inverter</label>
+                    <div className="flex items-center gap-2">
+                      <input 
+                        type="checkbox" 
+                        id="hasInverter" 
+                        checked={hasInverter} 
+                        onChange={(e) => setHasInverter(e.target.checked)} 
+                        className="w-4 h-4" 
+                      />
+                      <label htmlFor="hasInverter">Dotato di Inverter</label>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <button 
                   onClick={handleGenerate} 
@@ -848,6 +1076,152 @@ try {
       console.error(msg);
     }
   } catch (e) {}
+}
+
+// Definizione di base per STRUCTURE_TEMPLATES
+const STRUCTURE_TEMPLATES = {
+  pump_inv: [
+    { suffix: '.Command.Automatic', type: 'Bool', address: '3118,0', access: 'R/W', comment: 'Comando modalità automatica', scalaMin: 0, scalaMax: 50 },
+    { suffix: '.Command.Manual', type: 'Bool', address: '3118,1', access: 'R/W', comment: 'Comando modalità manuale', scalaMin: 0, scalaMax: 50 },
+    { suffix: '.Command.Cmd_Man', type: 'Bool', address: '3118,3', access: 'R/W', comment: 'Comando start manuale', scalaMin: 0, scalaMax: 50 },
+    { suffix: '.Command.Inv_Speed_Man', type: 'Real', address: '3120,0', access: 'R/W', comment: 'Riferimento manuale velocità inverter', rawMin: 0, rawMax: 50, unit: 'Hz', scalaMin: 0, scalaMax: 50 },
+    { suffix: '.Status.Ready', type: 'Bool', address: '3128,0', access: 'R', comment: 'Utenza pronta', scalaMin: 0, scalaMax: 50 },
+    { suffix: '.Status.Running', type: 'Bool', address: '3128,2', access: 'R', comment: 'Utenza in marcia', scalaMin: 0, scalaMax: 50 },
+    { suffix: '.Status.Automatic', type: 'Bool', address: '3128,3', access: 'R', comment: 'Utenza in modalità automatica', scalaMin: 0, scalaMax: 50 },
+    { suffix: '.Status.Manual', type: 'Bool', address: '3128,4', access: 'R', comment: 'Utenza in modalità manuale', scalaMin: 0, scalaMax: 50 },
+    { suffix: '.Status.Selector', type: 'Bool', address: '3128,5', access: 'R', comment: 'Selettore utenza in remoto', scalaMin: 0, scalaMax: 50 },
+    { suffix: '.Monitor.Frequency_Fbk', type: 'Real', address: '3130,0', access: 'R', comment: 'Feedback frequenza inverter', rawMin: 0, rawMax: 50, unit: 'Hz', scalaMin: 0, scalaMax: 50 },
+    { suffix: '.Monitor.Current', type: 'Real', address: '3134,0', access: 'R', comment: 'Feedback corrente', rawMin: 0, rawMax: 999, unit: 'A', scalaMin: 0, scalaMax: 999 },
+    { suffix: '.Monitor.Power', type: 'Real', address: '3138,0', access: 'R', comment: 'Feedback potenza', rawMin: 0, rawMax: 999, unit: 'Kw', scalaMin: 0, scalaMax: 999 },
+    { suffix: '.Monitor.Voltage', type: 'Real', address: '3142,0', access: 'R', comment: 'Feedback Tensione inverter', rawMin: 0, rawMax: 9999, unit: 'V', scalaMin: 0, scalaMax: 9999 },
+    { suffix: '.Worktime.Reset', type: 'Bool', address: '3162,0', access: 'R/W', comment: 'Comando reset ore parziali utenza' },
+    { suffix: '.Worktime.Total.Hour', type: 'DInt', address: '3164,0', access: 'R', comment: 'Ore totali', rawMin: 0, rawMax: 9999999, unit: 'Min', scalaMin: 0, scalaMax: 9999999 },
+    { suffix: '.Worktime.Total.Min', type: 'Int', address: '3168,0', access: 'R', comment: 'Minuti totali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 },
+    { suffix: '.Worktime.Partial.Hour', type: 'DInt', address: '3172,0', access: 'R', comment: 'Ore Parziali', rawMin: 0, rawMax: 9999999, unit: 'Min', scalaMin: 0, scalaMax: 9999999 },
+    { suffix: '.Worktime.Partial.Min', type: 'Int', address: '3176,0', access: 'R', comment: 'Minuti Parziali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 }
+  ],
+  pump_noinv: [
+    { suffix: '.Command.Automatic', type: 'Bool', address: '3118,0', access: 'R/W', comment: 'Comando modalità automatica' },
+    { suffix: '.Command.Manual', type: 'Bool', address: '3118,1', access: 'R/W', comment: 'Comando modalità manuale' },
+    { suffix: '.Command.Cmd_Man', type: 'Bool', address: '3118,3', access: 'R/W', comment: 'Comando start manuale' },
+    { suffix: '.Status.Ready', type: 'Bool', address: '3128,0', access: 'R', comment: 'Utenza pronta' },
+    { suffix: '.Status.Running', type: 'Bool', address: '3128,2', access: 'R', comment: 'Utenza in marcia' },
+    { suffix: '.Status.Automatic', type: 'Bool', address: '3128,3', access: 'R', comment: 'Utenza in modalità automatica' },
+    { suffix: '.Status.Manual', type: 'Bool', address: '3128,4', access: 'R', comment: 'Utenza in modalità manuale' },
+    { suffix: '.Status.Selector', type: 'Bool', address: '3128,5', access: 'R', comment: 'Selettore utenza in remoto' },
+    { suffix: '.Worktime.Reset', type: 'Bool', address: '3162,0', access: 'R/W', comment: 'Comando reset ore parziali utenza' },
+    { suffix: '.Worktime.Total.Hour', type: 'DInt', address: '3164,0', access: 'R', comment: 'Ore totali', rawMin: 0, rawMax: 9999999, unit: 'Min', scalaMin: 0, scalaMax: 9999999 },
+    { suffix: '.Worktime.Total.Min', type: 'Int', address: '3168,0', access: 'R', comment: 'Minuti totali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 },
+    { suffix: '.Worktime.Partial.Hour', type: 'DInt', address: '3172,0', access: 'R', comment: 'Ore Parziali', rawMin: 0, rawMax: 9999999, unit: 'Min', scalaMin: 0, scalaMax: 9999999 },
+    { suffix: '.Worktime.Partial.Min', type: 'Int', address: '3176,0', access: 'R', comment: 'Minuti Parziali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 }
+  ],
+  valve_inv: [
+    { suffix: '.Command.Automatic', type: 'Bool', address: '2482,0', access: 'R/W', comment: 'Comando modalità automatica' },
+    { suffix: '.Command.Manual', type: 'Bool', address: '2482,1', access: 'R/W', comment: 'Comando modalità manuale' },
+    { suffix: '.Command.Cmd_Man_Open', type: 'Bool', address: '2482,3', access: 'R/W', comment: 'Comando manuale Apertura' },
+    { suffix: '.Command.Cmd_Man_Close', type: 'Bool', address: '2484,0', access: 'R/W', comment: 'Comando manuale Chiusura' },
+    { suffix: '.Status.Ready', type: 'Bool', address: '2492,0', access: 'R', comment: 'Utenza pronta' },
+    { suffix: '.Status.Opening', type: 'Bool', address: '2492,2', access: 'R', comment: 'Utenza in apertura' },
+    { suffix: '.Status.Closing', type: 'Bool', address: '2492,3', access: 'R', comment: 'Utenza in chiusura' },
+    { suffix: '.Status.Automatic', type: 'Bool', address: '2492,4', access: 'R', comment: 'Utenza in modalità automatica' },
+    { suffix: '.Status.Manual', type: 'Bool', address: '2492,5', access: 'R', comment: 'Utenza in modalità manuale' },
+    { suffix: '.Status.Selector', type: 'Bool', address: '2494,0', access: 'R', comment: 'Selettore utenza in remoto' },
+    { suffix: '.Status.Open', type: 'Bool', address: '2498,0', access: 'R', comment: 'Utenza aperta' },
+    { suffix: '.Status.Close', type: 'Bool', address: '2502,0', access: 'R', comment: 'Utenza chiusa' }
+  ],
+  valve_noinv: [
+    { suffix: '.Command.Automatic', type: 'Bool', address: '2482,0', access: 'R/W', comment: 'Comando modalità automatica' },
+    { suffix: '.Command.Manual', type: 'Bool', address: '2482,1', access: 'R/W', comment: 'Comando modalità manuale' },
+    { suffix: '.Command.Cmd_Man', type: 'Bool', address: '2482,3', access: 'R/W', comment: 'Comando start manuale' },
+    { suffix: '.Status.Ready', type: 'Bool', address: '2492,0', access: 'R', comment: 'Utenza pronta' },
+    { suffix: '.Status.Running', type: 'Bool', address: '2492,2', access: 'R', comment: 'Utenza in marcia' },
+    { suffix: '.Status.Automatic', type: 'Bool', address: '2492,3', access: 'R', comment: 'Utenza in modalità automatica' },
+    { suffix: '.Status.Manual', type: 'Bool', address: '2492,4', access: 'R', comment: 'Utenza in modalità manuale' },
+    { suffix: '.Status.Selector', type: 'Bool', address: '2492,5', access: 'R', comment: 'Selettore utenza in remoto' },
+    { suffix: '.Worktime.Reset', type: 'Bool', address: '2526,0', access: 'R/W', comment: 'Comando reset ore parziali utenza' },
+    { suffix: '.Worktime.Total.Hour', type: 'DInt', address: '2528,0', access: 'R', comment: 'Ore totali', rawMin: 0, rawMax: 9999999, unit: 'Min', scalaMin: 0, scalaMax: 9999999 },
+    { suffix: '.Worktime.Total.Min', type: 'Int', address: '2532,0', access: 'R', comment: 'Minuti totali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 },
+    { suffix: '.Worktime.Partial.Hour', type: 'DInt', address: '2536,0', access: 'R', comment: 'Ore Parziali', rawMin: 0, rawMax: 9999999, unit: 'Min', scalaMin: 0, scalaMax: 9999999 },
+    { suffix: '.Worktime.Partial.Min', type: 'Int', address: '2540,0', access: 'R', comment: 'Minuti Parziali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 }
+  ],
+  analogiche: [
+    { suffix: 'Output.Actual', type: 'Real', address: '518,0', access: 'R', comment: 'Valore attuale analogica ingegnerizzata', rawMin: 0, rawMax: 999999, unit: '', scalaMin: 0, scalaMax: 999999 },
+    { suffix: 'Output.Min', type: 'Real', address: '522,0', access: 'R/W', comment: 'Max scalatura', rawMin: 0, rawMax: 999999, unit: '', scalaMin: 0, scalaMax: 999999 },
+    { suffix: 'Output.Max', type: 'Real', address: '526,0', access: 'R/W', comment: 'Min scalatura', rawMin: 0, rawMax: 59, unit: '', scalaMin: 0, scalaMax: 59 },
+    { suffix: 'Limit.H', type: 'Real', address: '530,0', access: 'R/W', comment: 'Setpoint allarme alto livello', rawMin: 0, rawMax: 999999, unit: '', scalaMin: 0, scalaMax: 999999 },
+    { suffix: 'Limit.L', type: 'Real', address: '534,0', access: 'R/W', comment: 'Setpoint allarme basso livello', rawMin: 0, rawMax: 59, unit: '', scalaMin: 0, scalaMax: 59 }
+  ]
+};
+// Helper per parsare indirizzi nel formato "word,bit"
+function parseAddr(s) {
+  if (!s || typeof s !== 'string') return { word: 0, bit: 0 };
+  const p = String(s).split(',');
+  return { word: parseInt(p[0], 10) || 0, bit: parseInt(p[1], 10) || 0 };
+}
+
+// Funzione per calcolare l'indirizzo sommando l'offset della sequenza all'indirizzo base
+function addressFromSequence(baseAddress, seqKey, index) {
+  // Definizione delle sequenze (devono corrispondere a quelle in ADDRESS_SEQUENCES)
+  const ADDRESS_SEQUENCES = {
+    'pump_inv': [
+      '256,0','256,1','256,3','258,0','266,0','266,2','266,3','266,4','266,5','268,0','272,0','276,0','280,0','300,0','302,0','306,0','310,0','314,0'
+    ],
+    'pump_noinv': [
+      '256,0','256,1','256,3','266,0','266,2','266,3','266,4','266,5','300,0','302,0','306,0','310,0','314,0'
+    ],
+    'valve_inv': [
+      '256,0','256,1','256,3','258,0','266,0','266,2','266,3','266,4','266,5','268,0','272,0','276,0'
+    ],
+    'valve_noinv': [
+      '256,0','256,1','256,3','266,0','266,2','266,3','266,4','266,5','300,0','302,0','306,0','310,0','314,0'
+    ],
+    'analogiche': [
+      '518,0','522,0','526,0','530,0','534,0'
+    ]
+  };
+  
+  const seq = ADDRESS_SEQUENCES[seqKey];
+  if (!seq || index < 0 || index >= seq.length) {
+    console.warn('[addressFromSequence] Sequenza non trovata o indice fuori range:', { seqKey, index });
+    return null;
+  }
+  
+  // Parse dell'indirizzo base (può essere "3180" o "3180,0")
+  const base = parseAddr(String(baseAddress).includes(',') ? baseAddress : `${baseAddress},0`);
+  // Parse dell'offset dalla sequenza
+  const offset = parseAddr(seq[index]);
+  
+  // Somma word e bit
+  let word = base.word + offset.word;
+  let bit = base.bit + offset.bit;
+  
+  // Gestione overflow dei bit (se >= 16, incrementa word)
+  if (bit >= 16) {
+    const carry = Math.floor(bit / 16);
+    word += carry;
+    bit = bit % 16;
+  }
+  
+  // Gestione bit negativi (con prestito)
+  if (bit < 0) {
+    const borrow = Math.ceil(Math.abs(bit) / 16);
+    word -= borrow;
+    bit = ((bit % 16) + 16) % 16;
+  }
+  
+  const result = `${word},${bit}`;
+  console.log('[addressFromSequence]', { 
+    seqKey, 
+    index, 
+    seqValue: seq[index], 
+    baseAddress, 
+    baseParsed: base,
+    offsetParsed: offset,
+    resultWord: word,
+    resultBit: bit,
+    result 
+  });
+  return result;
 }
   </script>
 </body>

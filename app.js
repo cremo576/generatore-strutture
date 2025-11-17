@@ -38,18 +38,20 @@ const PumpStructureGenerator = () => {
     // visivamente vuoto/trasparente se l'utente non vuole inserirlo.
     // Il nome di default usato durante l'export sarà 'struttura'.
 
+    // Miglioro la funzione tryLoadTemplate per gestire meglio il caricamento del file Excel
     const tryLoadTemplate = async () => {
-  try {
+      try {
+        console.log('[DEBUG] Tentativo di caricamento del file ListModel.xlsx');
         const res = await fetch('ListModel.xlsx');
-        if (!res.ok) throw new Error('Template non trovato via fetch');
+        if (!res.ok) throw new Error(`Errore nel caricamento del file: ${res.status} ${res.statusText}`);
+
         const ab = await res.arrayBuffer();
         const wb = XLSX.read(ab, { type: 'array' });
         const first = wb.Sheets[wb.SheetNames[0]];
         const aoa = XLSX.utils.sheet_to_json(first, { header: 1, raw: false });
+
         if (aoa && aoa.length > 1) {
-          // prima riga header
           setTemplateHeader(aoa[0]);
-          // trova il blocco template della prima pompa: le righe non vuote dopo l'header fino alla prima riga vuota o fino a fine
           const rows = [];
           for (let i = 1; i < aoa.length; i++) {
             const r = aoa[i];
@@ -58,11 +60,13 @@ const PumpStructureGenerator = () => {
             rows.push(r.map(c => (c === undefined ? '' : String(c))));
           }
           if (rows.length > 0) setTemplateRows(rows);
+          console.log('[DEBUG] Template caricato con successo', { header: aoa[0], rows });
+        } else {
+          console.warn('[DEBUG] Il file Excel è vuoto o non valido');
         }
-        console.log('Template ListModel caricato', { header: templateHeader, rows: templateRows });
       } catch (err) {
-        console.warn('Impossibile caricare ListModel.xlsx automaticamente:', err);
-        // Non facciamo niente: l'utente può importare normalmente e useremo il comportamento precedente
+        console.error('[DEBUG] Errore durante il caricamento del file Excel:', err);
+        alert('Errore durante il caricamento del file Excel. Assicurati che il file sia presente e valido.');
       }
     };
 
@@ -210,25 +214,28 @@ const PumpStructureGenerator = () => {
   const addressFromSequence = (baseRaw, seqKey, idx) => {
     const seq = ADDRESS_SEQUENCES[seqKey];
     if (!seq || idx < 0 || idx >= seq.length) return null;
-    // Somma l'offset dalla sequenza all'indirizzo base
-    const offset = parseAddr(seq[idx]);
+
     const base = parseAddr(baseRaw);
+    const offset = parseAddr(seq[idx]);
+
     let word = base.word + offset.word;
     let bit = base.bit + offset.bit;
-    // gestisci riporto se i bit superano 15
+
+    // Gestione overflow dei bit
     if (bit >= 16) {
       const carry = Math.floor(bit / 16);
       word += carry;
       bit = bit % 16;
     }
-    // gestisci bit negativi con prestito
+
+    // Gestione bit negativi con prestito
     if (bit < 0) {
       const borrow = Math.ceil(Math.abs(bit) / 16);
       word -= borrow;
       bit = ((bit % 16) + 16) % 16;
     }
+
     const result = `${word},${bit}`;
-    // Log dettagliato per debug
     console.log('[addressFromSequence]', { 
       seqKey, 
       idx, 
@@ -566,6 +573,79 @@ const PumpStructureGenerator = () => {
     return <i className={`lucide lucide-${name}`}></i>;
   };
 
+  // Aggiungo ulteriori log per il debug nella funzione buildGeneratedFromPumps
+  const buildGeneratedFromPumps = (pumps) => {
+    if (!pumps || !pumps.length) return { flat: [], aoa: [] };
+
+    const headers = templateHeader && templateHeader.length ? templateHeader : [
+      'Tag Name', 'Data type', 'Address PLC', 'ACCESSO', 'Comment', 'Stato', 'RaW min', 'RaW maX', 'Unità di misura', 'Scala min', 'Scala maX', 'Modifiche'
+    ];
+    const headerMap = templateHeaderMap || computeHeaderMap(headers);
+    const tagIndex = headerMap.tagIndex >= 0 ? headerMap.tagIndex : 0;
+    const addrIndex = headerMap.addrIndex >= 0 ? headerMap.addrIndex : 2;
+    const dataTypeIdx = headerMap.dataTypeIdx >= 0 ? headerMap.dataTypeIdx : 1;
+    const accessIdx = headerMap.accessIdx >= 0 ? headerMap.accessIdx : 3;
+    const commentIdx = headerMap.commentIdx >= 0 ? headerMap.commentIdx : 4;
+
+    const flat = [];
+    const aoa = [];
+
+    const seqKey = `${componentType === 'pump' ? 'pump' : 'valve'}_${hasInverter ? 'inv' : 'noinv'}`;
+    const tmpl = STRUCTURE_TEMPLATES[seqKey] || [];
+    const rowsPerPump = tmpl.length;
+
+    pumps.forEach((p, pIdx) => {
+      const pumpName = (p.nome || p.name || '').toString();
+      const baseRaw = p.indirizzo || p.address || '';
+
+      console.log(`[DEBUG] Generazione per pompa: ${pumpName}, indirizzo base: ${baseRaw}`);
+
+      for (let i = 0; i < rowsPerPump; i++) {
+        const tmeta = tmpl[i] || {};
+        const tagName = `${pumpName}${tmeta.suffix || `_r${i}`}`;
+        const addr = addressFromSequence(baseRaw, seqKey, i) || computeAddress(baseRaw, i, 0);
+
+        console.log(`[DEBUG] Tag: ${tagName}, Indirizzo calcolato: ${addr}`);
+
+        const flatItem = {
+          name: tagName,
+          type: tmeta.type || '',
+          address: addr,
+          access: tmeta.access || '',
+          comment: tmeta.comment || '',
+          stato: '',
+        };
+
+        if (tmeta.rawMin !== undefined) {
+          flatItem.rawMin = tmeta.rawMin;
+          flatItem.rawMax = tmeta.rawMax;
+          flatItem.unit = tmeta.unit;
+          flatItem.scalaMin = tmeta.scalaMin;
+          flatItem.scalaMax = tmeta.scalaMax;
+        }
+
+        flat.push(flatItem);
+
+        const row = new Array(headers.length).fill('');
+        row[tagIndex] = flatItem.name || '';
+        row[dataTypeIdx] = flatItem.type || '';
+        row[addrIndex] = flatItem.address || '';
+        row[accessIdx] = flatItem.access || '';
+        row[commentIdx] = flatItem.comment || '';
+
+        aoa.push(row);
+      }
+
+      if (pIdx < pumps.length - 1) {
+        aoa.push(new Array(headers.length).fill(''));
+        aoa.push(new Array(headers.length).fill(''));
+        aoa.push(new Array(headers.length).fill(''));
+      }
+    });
+
+    return { flat, aoa };
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
       <div className="max-w-7xl mx-auto">
@@ -626,36 +706,52 @@ const PumpStructureGenerator = () => {
                         onChange={(e) => {
                         const file = e.target.files[0];
                         if (!file) {
-                          console.error('Nessun file selezionato.');
+                          console.error('[IMPORT] Nessun file selezionato.');
                           return;
                         }
 
+                        console.log('[IMPORT] File selezionato:', file.name, 'Tipo:', file.type, 'Dimensione:', file.size);
+
                         const reader = new FileReader();
+                        
+                        reader.onerror = (error) => {
+                          console.error('[IMPORT] Errore durante la lettura del file:', error);
+                          alert('Errore durante la lettura del file.');
+                        };
+
                         reader.onload = (evt) => {
                           try {
+                            console.log('[IMPORT] File caricato, elaborazione in corso...');
                             let data;
                             if (file.name.endsWith('.csv')) {
                               // Gestione file CSV
                               const text = evt.target.result;
-                              console.log('Contenuto CSV:', text);
+                              console.log('[IMPORT] Contenuto CSV:', text.substring(0, 200));
                               const rows = text.split(/\r\n|\n/)
                                              .filter(row => row.trim().length > 0);
-                              // NON rimuovere l'intestazione: leggi tutte le righe
-                              data = rows;
+                              data = rows.map(row => row.split(/[,;\t]/));
+                              console.log('[IMPORT] Righe CSV parsate:', data.length);
                             } else {
                               // Gestione file Excel (.xlsx, .xls)
+                              console.log('[IMPORT] Lettura file Excel...');
                               const workbook = XLSX.read(evt.target.result, { type: 'array' });
+                              console.log('[IMPORT] Fogli disponibili:', workbook.SheetNames);
                               const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
                               
                               // Converti il foglio Excel in array di righe
                               const excelRows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-                              console.log('Righe Excel:', excelRows);
+                              console.log('[IMPORT] Righe Excel totali:', excelRows.length);
+                              console.log('[IMPORT] Prima riga (header):', excelRows[0]);
+                              console.log('[IMPORT] Seconda riga (esempio):', excelRows[1]);
                               
                               // NON rimuovere l'intestazione: leggi dalla prima riga in poi
                               data = excelRows
                                 .filter(row => row && row.length > 0 && row.some(cell => cell !== undefined && String(cell).trim() !== ''));
-                            }                              if (!data || data.length === 0) {
-                              console.error('Nessun dato valido trovato nel file importato.');
+                              console.log('[IMPORT] Righe filtrate:', data.length);
+                            }
+                            
+                            if (!data || data.length === 0) {
+                              console.error('[IMPORT] Nessun dato valido trovato nel file importato.');
                               alert('Il file importato non contiene dati validi.');
                               return;
                             }
@@ -671,6 +767,7 @@ const PumpStructureGenerator = () => {
                             const rawStructures = data.map((row, index) => {
                               const nome = (row[0] || '').toString().trim();
                               const indirizzo = row[2] !== undefined ? row[2].toString().trim() : '';
+                              console.log(`[IMPORT] Riga ${index}: Nome='${nome}', Indirizzo='${indirizzo}'`);
                               return {
                                 id: index + 1,
                                 nome: nome,
@@ -679,33 +776,40 @@ const PumpStructureGenerator = () => {
                               };
                             });
 
-                            console.log('Strutture grezze lette dal file:', rawStructures);
+                            console.log('[IMPORT] Strutture grezze lette dal file:', rawStructures);
 
                             // Filtra righe non valide: nome non vuoto E indirizzo numerico valido
                             const structures = rawStructures.filter(s => {
                               return s.nome && s.nome.length > 0 && s.hasValidAddress;
                             });
 
-                            console.log('Strutture filtrate (valide):', structures);
+                            console.log('[IMPORT] Strutture filtrate (valide):', structures);
+
+                            if (structures.length === 0) {
+                              console.warn('[IMPORT] Nessuna struttura valida trovata. Verifica il formato del file.');
+                              alert('Nessuna struttura valida trovata nel file. Assicurati che il file contenga:\n- Colonna 1: Nome pompa/valvola\n- Colonna 3: Indirizzo iniziale (formato numerico, es. 100 o 100,0)');
+                              return;
+                            }
 
                             // Converti la struttura in formato leggibile per l'anteprima
                             const formattedData = structures.map(structure => {
                               return `ID: ${structure.id}\nNome: ${structure.nome}\nIndirizzo: ${structure.indirizzo}\n`;
                             }).join('\n---\n');
 
-                            console.log('Dati formattati:', formattedData);
+                            console.log('[IMPORT] Dati formattati:', formattedData);
 
                             // Imposta i dati nella textarea
                             setTableData(formattedData);
 
                             // Non generiamo automaticamente la struttura all'import.
                             // L'utente deve cliccare il pulsante "Genera Struttura" per creare la struttura.
-                            // Questo evita generazioni non volute e mantiene un unico punto di generazione.
                             setStructure([]);
-                            console.log('Dati importati (struttura non generata). Clicca "Genera Struttura" per creare la struttura.');
+                            console.log('[IMPORT] Importazione completata con successo! Clicca "Genera Struttura" per creare la struttura.');
+                            alert(`Importate ${structures.length} pompe/valvole con successo! Clicca "Genera Struttura" per procedere.`);
                           } catch (error) {
-                            console.error('Errore durante la lettura del file:', error);
-                            alert('Errore durante la lettura del file. Assicurati che il formato sia corretto.');
+                            console.error('[IMPORT] Errore durante la lettura del file:', error);
+                            console.error('[IMPORT] Stack trace:', error.stack);
+                            alert('Errore durante la lettura del file: ' + error.message);
                           }
                         };
 
