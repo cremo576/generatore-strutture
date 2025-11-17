@@ -63,12 +63,29 @@ function showMessage(message, type = 'info') {
 
 // Definizione della funzione computeHeaderMap per calcolare la mappa degli header
 function computeHeaderMap(headers) {
+  const normalize = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '');
   const map = {};
   headers.forEach((header, index) => {
-    const key = header.toLowerCase().replace(/\s+/g, '');
+    const key = normalize(header);
     map[key] = index;
   });
-  return map;
+
+  // helper to find first matching normalized key from a list
+  const idxOf = (names) => {
+    for (const n of names) {
+      const k = normalize(n);
+      if (map[k] !== undefined) return map[k];
+    }
+    return -1;
+  };
+
+  return Object.assign({}, map, {
+    tagIndex: idxOf(['Tag Name', 'Tag', 'TagName']),
+    dataTypeIdx: idxOf(['Data type', 'Datatype', 'DataType']),
+    addrIndex: idxOf(['Address PLC', 'Address', 'AddressPLC', 'Indirizzo']),
+    accessIdx: idxOf(['ACCESSO', 'Accesso', 'Access']),
+    commentIdx: idxOf(['Comment', 'Commento', 'Note'])
+  });
 }
 
 const PumpStructureGenerator = () => {
@@ -77,6 +94,8 @@ const PumpStructureGenerator = () => {
   const [password, setPassword] = useState('');
   const [componentType, setComponentType] = useState('pump');
   const [hasInverter, setHasInverter] = useState(false);
+  const [dbNumber, setDbNumber] = useState('1');
+  const [addrDecimalSep, setAddrDecimalSep] = useState(',');
   const [tableData, setTableData] = useState('');
   const [structure, setStructure] = useState([]);
   const [templateHeader, setTemplateHeader] = useState(null);
@@ -348,8 +367,9 @@ const PumpStructureGenerator = () => {
         // Non generiamo automaticamente la struttura all'import.
         setStructure([]);
         setPreviewRows([]);
-        console.log('[IMPORT] Importazione completata con successo! Clicca "Genera Struttura" per creare la struttura.');
-        showMessage(`Importate ${structures.length} pompe/valvole con successo! Clicca "Genera Struttura" per procedere.`, 'success');
+        console.log('[IMPORT] Importazione completata con successo.');
+        // Messaggio semplificato richiesto dall'utente
+        showMessage('File Excel importato con successo.', 'success');
       } catch (error) {
         console.error('[IMPORT] Errore durante la lettura del file:', error);
         console.error('[IMPORT] Stack trace:', error.stack);
@@ -447,7 +467,32 @@ const PumpStructureGenerator = () => {
     const flat = [];
     const aoa = [];
 
-    const seqKey = `${componentType === 'pump' ? 'pump' : 'valve'}_${hasInverter ? 'inv' : 'noinv'}`;
+    // Helper: formatta l'indirizzo nel formato DB{n}.DBW/DBX/DBD a seconda del tipo dati
+    const formatAddress = (addrStr, dbNum, dataType) => {
+      if (!addrStr) return '';
+      const sep = addrDecimalSep === '.' ? '.' : ',';
+      const parsed = parseAddr(String(addrStr).includes(',') || String(addrStr).includes('.') ? addrStr : `${addrStr},0`);
+      const word = parsed.word || 0;
+      const bit = parsed.bit || 0;
+      const dt = String(dataType || '').toLowerCase();
+      const db = String(dbNum || '').trim();
+      if (!db) return `${word}${sep}${bit}`;
+
+      if (dt === 'bool') {
+        // bit address (use selected separator between word and bit)
+        return `DB${db}.DBX${word}${sep}${bit}`;
+      }
+      if (dt === 'word' || dt === 'int') {
+        return `DB${db}.DBW${word}${sep}0`;
+      }
+      if (dt === 'real' || dt === 'dint' || dt === 'dword') {
+        return `DB${db}.DBD${word}${sep}0`;
+      }
+      // default: use DBW
+      return `DB${db}.DBW${word}${sep}0`;
+    };
+
+    const seqKey = componentType === 'analogiche' ? 'analogiche' : `${componentType === 'pump' ? 'pump' : 'valve'}_${hasInverter ? 'inv' : 'noinv'}`;
     const tmpl = STRUCTURE_TEMPLATES[seqKey] || [];
 
     // rows per pump = number of template fields for this device type
@@ -469,7 +514,8 @@ const PumpStructureGenerator = () => {
         const flatItem = {
           name: tagName,
           type: tmeta.type || '',
-          address: addr,
+          addressRaw: addr,
+          address: formatAddress(addr, dbNumber, tmeta.type || ''),
           access: tmeta.access || '',
           comment: tmeta.comment || '',
           stato: '',
@@ -587,7 +633,14 @@ const PumpStructureGenerator = () => {
       const pompeMap = {};
       const pumpNamesOrdered = [];
       structure.forEach(item => {
-        const pompeName = (item.name && item.name.split ? item.name.split('.')[0] : String(item.name || ''));
+        let pompeName = (item.name && item.name.split ? item.name.split('.')[0] : String(item.name || ''));
+        
+        // Per le analogiche, rimuovi il suffisso Output/Limit per raggruppare correttamente
+        // Es: "Analogica1Output" e "Analogica1Limit" diventano entrambi "Analogica1"
+        if (componentType === 'analogiche') {
+          pompeName = pompeName.replace(/Output$|Limit$/, '');
+        }
+        
         if (!pompeMap[pompeName]) {
           pompeMap[pompeName] = [];
           pumpNamesOrdered.push(pompeName);
@@ -643,7 +696,8 @@ const PumpStructureGenerator = () => {
         }
 
         // Crea il file Excel con header + riga vuota + dati
-        const finalHeaders = ['Tag Name', 'Data type', 'Address PLC', 'ACCESSO', 'Comment', 'Stato', 'RaW min', 'RaW maX', 'Unità di misura', 'Scala min', 'Scala maX', 'Modifiche'];
+        // Usa l'intestazione del template se presente, altrimenti usa le headers di default
+        const finalHeaders = (templateHeader && templateHeader.length) ? templateHeader : ['Tag Name', 'Data type', 'Address PLC', 'ACCESSO', 'Comment', 'Stato', 'RaW min', 'RaW maX', 'Unità di misura', 'Scala min', 'Scala maX', 'Modifiche'];
         const emptyRow = new Array(finalHeaders.length).fill('');
         const allRows = [finalHeaders, emptyRow].concat(generatedRows);
         
@@ -693,10 +747,26 @@ const PumpStructureGenerator = () => {
         // Output structure rows directly (no pump title rows)
         pumpNames.forEach((pompeName, pIdx) => {
           pompeMap[pompeName].forEach(item => {
+            // format address based on data type and DB number
+            const itAddr = item.address || item.addressRaw || '';
+            const dt = String(item.type || '').toLowerCase();
+            let addrFormatted = itAddr;
+            const db = String(dbNumber || '').trim();
+            const sep = addrDecimalSep === '.' ? '.' : ',';
+            // if address already formatted (starts with DB), keep it as-is
+            if (!/^\s*DB\d+/i.test(String(itAddr)) && db) {
+              const parsed = parseAddr((String(itAddr).includes(',') || String(itAddr).includes('.')) ? itAddr : `${itAddr},0`);
+              const w = parsed.word || 0;
+              const b = parsed.bit || 0;
+              if (dt === 'bool') addrFormatted = `DB${db}.DBX${w}${sep}${b}`;
+              else if (dt === 'word' || dt === 'int') addrFormatted = `DB${db}.DBW${w}${sep}0`;
+              else if (dt === 'real' || dt === 'dint' || dt === 'dword') addrFormatted = `DB${db}.DBD${w}${sep}0`;
+              else addrFormatted = `DB${db}.DBW${w}${sep}0`;
+            }
             aoa.push([
               item.name || '',
               item.type || '',
-              item.address || '',
+              addrFormatted,
               item.access || '',
               item.comment || '',
               item.stato || '',
@@ -834,7 +904,26 @@ const PumpStructureGenerator = () => {
                   >
                     <option value="pump">Pompa</option>
                     <option value="valve">Valvola</option>
+                    <option value="analogiche">Analogiche</option>
                   </select>
+                </div>
+
+                <div className="mt-2">
+                  <label className="block text-sm font-medium mb-1">Numero DB</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={dbNumber}
+                    onChange={(e) => setDbNumber(String(e.target.value))}
+                    className="w-full p-2 border rounded"
+                  />
+                </div>
+                <div className="mt-2">
+                  <label className="block text-sm font-medium mb-1">Separatore decimale indirizzi</label>
+                  <div className="flex gap-2 items-center">
+                    <label className="text-sm"><input type="radio" name="addrSep" value="," checked={addrDecimalSep === ','} onChange={() => setAddrDecimalSep(',')} /> Virgola (,)</label>
+                    <label className="text-sm"><input type="radio" name="addrSep" value="." checked={addrDecimalSep === '.'} onChange={() => setAddrDecimalSep('.')} /> Punto (.)</label>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -882,19 +971,21 @@ const PumpStructureGenerator = () => {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-1">Configurazione Inverter</label>
-                  <div className="flex items-center gap-2">
-                    <input 
-                      type="checkbox" 
-                      id="hasInverter" 
-                      checked={hasInverter} 
-                      onChange={(e) => setHasInverter(e.target.checked)} 
-                      className="w-4 h-4" 
-                    />
-                    <label htmlFor="hasInverter">Dotato di Inverter</label>
+                {componentType !== 'analogiche' && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Configurazione Inverter</label>
+                    <div className="flex items-center gap-2">
+                      <input 
+                        type="checkbox" 
+                        id="hasInverter" 
+                        checked={hasInverter} 
+                        onChange={(e) => setHasInverter(e.target.checked)} 
+                        className="w-4 h-4" 
+                      />
+                      <label htmlFor="hasInverter">Dotato di Inverter</label>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <button 
                   onClick={handleGenerate} 
@@ -1052,6 +1143,13 @@ const STRUCTURE_TEMPLATES = {
     { suffix: '.Worktime.Total.Min', type: 'Int', address: '2532,0', access: 'R', comment: 'Minuti totali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 },
     { suffix: '.Worktime.Partial.Hour', type: 'DInt', address: '2536,0', access: 'R', comment: 'Ore Parziali', rawMin: 0, rawMax: 9999999, unit: 'Min', scalaMin: 0, scalaMax: 9999999 },
     { suffix: '.Worktime.Partial.Min', type: 'Int', address: '2540,0', access: 'R', comment: 'Minuti Parziali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 }
+  ],
+  analogiche: [
+    { suffix: 'Output.Actual', type: 'Real', address: '518,0', access: 'R', comment: 'Valore attuale analogica ingegnerizzata', rawMin: 0, rawMax: 999999, unit: '', scalaMin: 0, scalaMax: 999999 },
+    { suffix: 'Output.Min', type: 'Real', address: '522,0', access: 'R/W', comment: 'Max scalatura', rawMin: 0, rawMax: 999999, unit: '', scalaMin: 0, scalaMax: 999999 },
+    { suffix: 'Output.Max', type: 'Real', address: '526,0', access: 'R/W', comment: 'Min scalatura', rawMin: 0, rawMax: 59, unit: '', scalaMin: 0, scalaMax: 59 },
+    { suffix: 'Limit.H', type: 'Real', address: '530,0', access: 'R/W', comment: 'Setpoint allarme alto livello', rawMin: 0, rawMax: 999999, unit: '', scalaMin: 0, scalaMax: 999999 },
+    { suffix: 'Limit.L', type: 'Real', address: '534,0', access: 'R/W', comment: 'Setpoint allarme basso livello', rawMin: 0, rawMax: 59, unit: '', scalaMin: 0, scalaMax: 59 }
   ]
 };
 // Helper per parsare indirizzi nel formato "word,bit"
@@ -1076,6 +1174,9 @@ function addressFromSequence(baseAddress, seqKey, index) {
     ],
     'valve_noinv': [
       '256,0','256,1','256,3','266,0','266,2','266,3','266,4','266,5','300,0','302,0','306,0','310,0','314,0'
+    ],
+    'analogiche': [
+      '518,0','522,0','526,0','530,0','534,0'
     ]
   };
   
