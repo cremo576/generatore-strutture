@@ -32,9 +32,9 @@ $commitMsg = "Aggiornamento automatico - $timestamp"
 git commit -m "$commitMsg"
 
 # Push sul branch principale
-Write-Output "Eseguo git push origin master..."
+Write-Output "Eseguo git push origin main..."
 try {
-  git push origin master
+  git push origin main
   Write-Output "Push completato con successo!"
 } catch {
   Write-Error "Errore durante il push: $_.Exception.Message"
