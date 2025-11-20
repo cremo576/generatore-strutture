@@ -492,7 +492,7 @@ const PumpStructureGenerator = () => {
       return `DB${db}.DBW${word}${sep}0`;
     };
 
-    const seqKey = componentType === 'analogiche' ? 'analogiche' : `${componentType === 'pump' ? 'pump' : 'valve'}_${hasInverter ? 'inv' : 'noinv'}`;
+    const seqKey = componentType === 'analogiche' ? 'analogiche' : (componentType === 'valve' ? 'valve' : `pump_${hasInverter ? 'inv' : 'noinv'}`);
     const tmpl = STRUCTURE_TEMPLATES[seqKey] || [];
 
     // rows per pump = number of template fields for this device type
@@ -971,7 +971,7 @@ const PumpStructureGenerator = () => {
                   </div>
                 </div>
 
-                {componentType !== 'analogiche' && (
+                {componentType === 'pump' && (
                   <div>
                     <label className="block text-sm font-medium mb-1">Configurazione Inverter</label>
                     <div className="flex items-center gap-2">
@@ -1144,6 +1144,20 @@ const STRUCTURE_TEMPLATES = {
     { suffix: '.Worktime.Partial.Hour', type: 'DInt', address: '2536,0', access: 'R', comment: 'Ore Parziali', rawMin: 0, rawMax: 9999999, unit: 'Min', scalaMin: 0, scalaMax: 9999999 },
     { suffix: '.Worktime.Partial.Min', type: 'Int', address: '2540,0', access: 'R', comment: 'Minuti Parziali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 }
   ],
+  valve: [
+    { suffix: '.Command.Atomatic', type: 'Bool', access: 'R/W', comment: 'Comando modalità automatica' },
+    { suffix: '.Command.Manual', type: 'Bool', access: 'R/W', comment: 'Comando modalità manuale' },
+    { suffix: '.Command.Cmd_Man_Open', type: 'Bool', access: 'R/W', comment: 'Comando manuale Apertura' },
+    { suffix: '.Command.Cmd_Man_Close', type: 'Bool', access: 'R/W', comment: 'Comando manuale Chiusura' },
+    { suffix: '.Status.Ready', type: 'Bool', access: 'R', comment: 'Utenza pronta' },
+    { suffix: '.Status.Opening', type: 'Bool', access: 'R', comment: 'Utenza in apertura' },
+    { suffix: '.Status.Closing', type: 'Bool', access: 'R', comment: 'Utenza in chiusura' },
+    { suffix: '.Status.Automatic', type: 'Bool', access: 'R', comment: 'Utenza in modalità automatica' },
+    { suffix: '.Status.Manual', type: 'Bool', access: 'R', comment: 'Utenza in modalità manuale' },
+    { suffix: '.Status.Selector', type: 'Bool', access: 'R', comment: 'Selettore utenza in remoto' },
+    { suffix: '.Status.Open', type: 'Bool', access: 'R', comment: 'Utenza aperta' },
+    { suffix: '.Status.Close', type: 'Bool', access: 'R', comment: 'Utenza chiusa' }
+  ],
   analogiche: [
     { suffix: 'Output.Actual', type: 'Real', address: '518,0', access: 'R', comment: 'Valore attuale analogica ingegnerizzata', rawMin: 0, rawMax: 999999, unit: '', scalaMin: 0, scalaMax: 999999 },
     { suffix: 'Output.Min', type: 'Real', address: '522,0', access: 'R/W', comment: 'Max scalatura', rawMin: 0, rawMax: 999999, unit: '', scalaMin: 0, scalaMax: 999999 },
@@ -1174,6 +1188,9 @@ function addressFromSequence(baseAddress, seqKey, index) {
     ],
     'valve_noinv': [
       '256,0','256,1','256,3','266,0','266,2','266,3','266,4','266,5','300,0','302,0','306,0','310,0','314,0'
+    ],
+    'valve': [
+      '256,0','256,1','256,3','256,5','258,0','258,1','258,2','258,3','258,4','258,5','258,6','258,7'
     ],
     'analogiche': [
       '518,0','522,0','526,0','530,0','534,0'

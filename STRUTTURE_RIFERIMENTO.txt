@@ -74,9 +74,9 @@ Per gli indirizzi di questa struttura incrementare i seguenti valori all'indiriz
 310,0
 314,0
 
-Valvole con Inverter
+Valvole
 --------------------
-[NomeValvola].Command.Automatic
+[NomeValvola].Command.Atomatic
 [NomeValvola].Command.Manual
 [NomeValvola].Command.Cmd_Man_Open
 [NomeValvola].Command.Cmd_Man_Close
@@ -88,56 +88,21 @@ Valvole con Inverter
 [NomeValvola].Status.Selector
 [NomeValvola].Status.Open
 [NomeValvola].Status.Close
-[NomeValvola].Worktime.Reset
-[NomeValvola].Worktime.Total.Hour
-[NomeValvola].Worktime.Total.Min
-[NomeValvola].Worktime.Partial.Hour
-[NomeValvola].Worktime.Partial.Min
 
 Per gli indirizzi di questa struttura incrementare i seguenti valori all'indirizzo iniziale per generare gli indirizzi di ogni parametro della struttura : 
+
 256,0
 256,1
 256,3
+256,5
 258,0
-266,0
-266,2
-266,3
-266,4
-266,5
-268,0
-272,0
-276,0
-
-Valvole senza Inverter
-----------------------
-[NomeValvola].Command.Automatic
-[NomeValvola].Command.Manual
-[NomeValvola].Command.Cmd_Man
-[NomeValvola].Status.Ready
-[NomeValvola].Status.Automatic
-[NomeValvola].Status.Manual
-[NomeValvola].Status.Selector
-[NomeValvola].Worktime.Reset
-[NomeValvola].Worktime.Total.Hour
-[NomeValvola].Worktime.Total.Min
-[NomeValvola].Worktime.Partial.Hour
-[NomeValvola].Worktime.Partial.Min
-
-Per gli indirizzi di questa struttura incrementare i seguenti valori all'indirizzo iniziale per generare gli indirizzi di ogni parametro della struttura : 
-256,0
-256,1
-256,3
-266,0
-266,2
-266,3
-266,4
-266,5
-300,0
-302,0
-306,0
-310,0
-314,0
-
+258,1
+258,2
+258,3
+258,4
+258,5
+258,6
+258,7
 
 Analogiche
 ----------

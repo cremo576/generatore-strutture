@@ -23,7 +23,7 @@ const PumpStructureGenerator = () => {
   const [loggedIn, setLoggedIn] = useState(false);
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
-  const [componentType, setComponentType] = useState('pump');
+  const [componentType, setComponentType] = useState('');
   const [hasInverter, setHasInverter] = useState(false);
   const [tableData, setTableData] = useState('');
   const [structure, setStructure] = useState([]);
@@ -126,11 +126,8 @@ const PumpStructureGenerator = () => {
     'pump_noinv': [
       '256,0','256,1','256,3','266,0','266,2','266,3','266,4','266,5','300,0','302,0','306,0','310,0','314,0'
     ],
-    'valve_inv': [
-      '256,0','256,1','256,3','258,0','266,0','266,2','266,3','266,4','266,5','268,0','272,0','276,0'
-    ],
-    'valve_noinv': [
-      '256,0','256,1','256,3','266,0','266,2','266,3','266,4','266,5','300,0','302,0','306,0','310,0','314,0'
+    'valve': [
+      '256,0','256,1','256,3','256,5','258,0','258,1','258,2','258,3','258,4','258,5','258,6','258,7'
     ]
   };
 
@@ -179,34 +176,19 @@ const PumpStructureGenerator = () => {
       { suffix: '.Worktime.Partial.Hour', type: 'Dint', access: 'R', comment: 'Ore Parziali', rawMin: 0, rawMax: 9999999, unit: 'Min', scalaMin: 0, scalaMax: 9999999 },
   { suffix: '.Worktime.Partial.Min', type: 'Int', access: 'R', comment: 'Minuti Parziali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 }
     ],
-    'valve_inv': [
+    'valve': [
       { suffix: '.Command.Atomatic', type: 'Bool', access: 'R/W', comment: 'Comando modalità automatica' },
       { suffix: '.Command.Manual', type: 'Bool', access: 'R/W', comment: 'Comando modalità manuale' },
-      { suffix: '.Command.Cmd_Man', type: 'Bool', access: 'R/W', comment: 'Comando start manuale' },
       { suffix: '.Command.Cmd_Man_Open', type: 'Bool', access: 'R/W', comment: 'Comando manuale Apertura' },
+      { suffix: '.Command.Cmd_Man_Close', type: 'Bool', access: 'R/W', comment: 'Comando manuale Chiusura' },
       { suffix: '.Status.Ready', type: 'Bool', access: 'R', comment: 'Utenza pronta' },
       { suffix: '.Status.Opening', type: 'Bool', access: 'R', comment: 'Utenza in apertura' },
       { suffix: '.Status.Closing', type: 'Bool', access: 'R', comment: 'Utenza in chiusura' },
       { suffix: '.Status.Automatic', type: 'Bool', access: 'R', comment: 'Utenza in modalità automatica' },
       { suffix: '.Status.Manual', type: 'Bool', access: 'R', comment: 'Utenza in modalità manuale' },
       { suffix: '.Status.Selector', type: 'Bool', access: 'R', comment: 'Selettore utenza in remoto' },
-      { suffix: '.Worktime.Reset', type: 'Bool', access: 'R/W', comment: 'Comando reset ore parziali utenza' },
-      { suffix: '.Worktime.Total.Hour', type: 'Dint', access: 'R', comment: 'Ore totali', rawMin: 0, rawMax: 9999999, unit: 'Min', scalaMin: 0, scalaMax: 9999999 }
-    ],
-    'valve_noinv': [
-      { suffix: '.Command.Atomatic', type: 'Bool', access: 'R/W', comment: 'Comando modalità automatica' },
-      { suffix: '.Command.Manual', type: 'Bool', access: 'R/W', comment: 'Comando modalità manuale' },
-      { suffix: '.Command.Cmd_Man', type: 'Bool', access: 'R/W', comment: 'Comando start manuale' },
-      { suffix: '.Status.Ready', type: 'Bool', access: 'R', comment: 'Utenza pronta' },
-      { suffix: '.Status.Running', type: 'Bool', access: 'R', comment: 'Utenza in marcia' },
-      { suffix: '.Status.Automatic', type: 'Bool', access: 'R', comment: 'Utenza in modalità automatica' },
-      { suffix: '.Status.Manual', type: 'Bool', access: 'R', comment: 'Utenza in modalità manuale' },
-      { suffix: '.Status.Selector', type: 'Bool', access: 'R', comment: 'Selettore utenza in remoto' },
-      { suffix: '.Worktime.Reset', type: 'Bool', access: 'R/W', comment: 'Comando reset ore parziali utenza' },
-      { suffix: '.Worktime.Total.Hour', type: 'Dint', access: 'R', comment: 'Ore totali', rawMin: 0, rawMax: 9999999, unit: 'Min', scalaMin: 0, scalaMax: 9999999 },
-  { suffix: '.Worktime.Total.Min', type: 'Int', access: 'R', comment: 'Minuti totali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 },
-      { suffix: '.Worktime.Partial.Hour', type: 'Dint', access: 'R', comment: 'Ore Parziali', rawMin: 0, rawMax: 9999999, unit: 'Min', scalaMin: 0, scalaMax: 9999999 },
-  { suffix: '.Worktime.Partial.Min', type: 'Int', access: 'R', comment: 'Minuti Parziali', rawMin: 0, rawMax: 59, unit: 'Min', scalaMin: 0, scalaMax: 59 }
+      { suffix: '.Status.Open', type: 'Bool', access: 'R', comment: 'Utenza aperta' },
+      { suffix: '.Status.Close', type: 'Bool', access: 'R', comment: 'Utenza chiusa' }
     ]
   };
 
@@ -646,6 +628,21 @@ const PumpStructureGenerator = () => {
     return { flat, aoa };
   };
 
+  const renderInverterOption = () => {
+    return componentType === 'pump' ? (
+      <div>
+        <label>
+          <input
+            type="checkbox"
+            checked={hasInverter}
+            onChange={(e) => setHasInverter(e.target.checked)}
+          />
+          Dotato di Inverter
+        </label>
+      </div>
+    ) : null;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
       <div className="max-w-7xl mx-auto">
@@ -692,6 +689,7 @@ const PumpStructureGenerator = () => {
                     onChange={(e) => setComponentType(e.target.value)} 
                     className="w-full p-2 border rounded"
                   >
+                    <option value="">Seleziona tipologia...</option>
                     <option value="pump">Pompa</option>
                     <option value="valve">Valvola</option>
                   </select>
@@ -842,19 +840,21 @@ const PumpStructureGenerator = () => {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-1">Configurazione Inverter</label>
-                  <div className="flex items-center gap-2">
-                    <input 
-                      type="checkbox" 
-                      id="hasInverter" 
-                      checked={hasInverter} 
-                      onChange={(e) => setHasInverter(e.target.checked)} 
-                      className="w-4 h-4" 
-                    />
-                    <label htmlFor="hasInverter">Dotato di Inverter</label>
+                {componentType === 'pump' && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Configurazione Inverter</label>
+                    <div className="flex items-center gap-2">
+                      <input 
+                        type="checkbox" 
+                        id="hasInverter" 
+                        checked={hasInverter} 
+                        onChange={(e) => setHasInverter(e.target.checked)} 
+                        className="w-4 h-4" 
+                      />
+                      <label htmlFor="hasInverter">Dotato di Inverter</label>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <button 
                   onClick={handleGenerate} 
