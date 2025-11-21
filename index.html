@@ -12,6 +12,136 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
   <link rel="stylesheet" href="style.css">
+  <style>
+    /* Ultra-smooth animation for settings dropdown - matching select style */
+    details.settings-dropdown {
+      transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+      background: linear-gradient(to bottom, #ffffff 0%, #f9fafb 100%);
+      border: 2px solid #d1d5db;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+    
+    details.settings-dropdown:hover {
+      border-color: #60a5fa;
+      box-shadow: 
+        0 0 0 3px rgba(59, 130, 246, 0.08),
+        0 4px 12px rgba(59, 130, 246, 0.12);
+      background: linear-gradient(to bottom, #ffffff 0%, #eff6ff 100%);
+      transform: translateY(-1px) scale(1.005);
+    }
+    
+    details.settings-dropdown[open] {
+      border-color: #3b82f6;
+      box-shadow: 
+        0 0 0 4px rgba(59, 130, 246, 0.2),
+        0 8px 20px rgba(59, 130, 246, 0.15);
+      transform: translateY(-2px) scale(1.01);
+      background: #ffffff;
+    }
+    
+    details.settings-dropdown summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      padding: 0.5rem;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      outline: none;
+    }
+    
+    /* arrow indicator with smooth rotation - matching select style */
+    details.settings-dropdown summary::after {
+      content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      display: inline-block;
+      transform-origin: center;
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      margin-left: 0.5rem;
+      width: 14px;
+      height: 14px;
+    }
+    
+    details.settings-dropdown[open] summary::after {
+      transform: rotate(180deg);
+    }
+
+    details.settings-dropdown .settings-content {
+      transform-origin: top;
+      transform: scaleY(0) translateY(-10px);
+      opacity: 0;
+      overflow: hidden;
+      transition: 
+        transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
+        opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      will-change: transform, opacity;
+    }
+    
+    details.settings-dropdown[open] .settings-content {
+      transform: scaleY(1) translateY(0);
+      opacity: 1;
+    }
+
+    /* Ultra-smooth select dropdown with custom styling */
+    select.smooth-select {
+      transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+      cursor: pointer;
+      background: linear-gradient(to bottom, #ffffff 0%, #f9fafb 100%);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.75rem center;
+      background-size: 14px;
+      padding-right: 2.75rem;
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      border: 2px solid #d1d5db;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+    
+    select.smooth-select:hover {
+      border-color: #60a5fa;
+      box-shadow: 
+        0 0 0 3px rgba(59, 130, 246, 0.08),
+        0 4px 12px rgba(59, 130, 246, 0.12);
+      background: linear-gradient(to bottom, #ffffff 0%, #eff6ff 100%);
+      transform: translateY(-1px) scale(1.005);
+    }
+    
+    select.smooth-select:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 
+        0 0 0 4px rgba(59, 130, 246, 0.2),
+        0 8px 20px rgba(59, 130, 246, 0.15);
+      transform: translateY(-2px) scale(1.01);
+      background: #ffffff;
+    }
+    
+    select.smooth-select:active {
+      transform: translateY(0) scale(0.995);
+    }
+    
+    /* Beautiful dropdown options - fixed visibility */
+    select.smooth-select option {
+      padding: 0.75rem 1rem;
+      background: white;
+      color: #111827;
+      font-size: 0.95rem;
+      font-weight: 500;
+    }
+    
+    select.smooth-select option:hover {
+      background: #eff6ff;
+      color: #1e40af;
+    }
+    
+    select.smooth-select option:checked {
+      background: #3b82f6;
+      color: white;
+      font-weight: 600;
+    }
+  </style>
 </head>
 <body>
   <div id="root"></div>
@@ -96,6 +226,8 @@ const PumpStructureGenerator = () => {
   const [hasInverter, setHasInverter] = useState(false);
   const [dbNumber, setDbNumber] = useState('1');
   const [addrDecimalSep, setAddrDecimalSep] = useState(',');
+  const [useDescription, setUseDescription] = useState(true);
+  const [skipEmptyDescription, setSkipEmptyDescription] = useState(true);
   const [tableData, setTableData] = useState('');
   const [structure, setStructure] = useState([]);
   const [templateHeader, setTemplateHeader] = useState(null);
@@ -328,12 +460,14 @@ const PumpStructureGenerator = () => {
 
         const rawStructures = data.map((row, index) => {
           const nome = (row[0] || '').toString().trim();
-          const indirizzo = row[2] !== undefined ? row[2].toString().trim() : '';
-          console.log(`[IMPORT] Riga ${index}: Nome='${nome}', Indirizzo='${indirizzo}'`);
+          const indirizzo = row[1] !== undefined ? row[1].toString().trim() : '';
+          const descrizione = row[2] !== undefined ? row[2].toString().trim() : '';
+          console.log(`[IMPORT] Riga ${index}: Nome='${nome}', Indirizzo='${indirizzo}', Descrizione='${descrizione}'`);
           return {
             id: index + 1,
             nome: nome,
             indirizzo: indirizzo,
+            descrizione: descrizione,
             hasValidAddress: numericFrom(indirizzo) !== null
           };
         });
@@ -349,13 +483,13 @@ const PumpStructureGenerator = () => {
 
         if (structures.length === 0) {
           console.warn('[IMPORT] Nessuna struttura valida trovata. Verifica il formato del file.');
-          showMessage('Nessuna struttura valida trovata nel file. Assicurati che il file contenga:\n- Colonna 1: Nome pompa/valvola\n- Colonna 3: Indirizzo iniziale (formato numerico, es. 100 o 100,0)', 'warning');
+          showMessage('Nessuna struttura valida trovata nel file. Assicurati che il file contenga:\n- Colonna A: Nome pompa/valvola/analogica\n- Colonna B: Indirizzo iniziale (formato numerico, es. 100 o 100,0)\n- Colonna C: Descrizione (opzionale, aggiunta ai commenti)', 'warning');
           return;
         }
 
         // Converti la struttura in formato leggibile per l'anteprima
         const formattedData = structures.map(structure => {
-          return `ID: ${structure.id}\nNome: ${structure.nome}\nIndirizzo: ${structure.indirizzo}\n`;
+          return `ID: ${structure.id}\nNome: ${structure.nome}\nIndirizzo: ${structure.indirizzo}\nDescrizione: ${structure.descrizione || '(nessuna)'}\n`;
         }).join('\n---\n');
 
         console.log('[IMPORT] Dati formattati:', formattedData);
@@ -498,9 +632,18 @@ const PumpStructureGenerator = () => {
     // rows per pump = number of template fields for this device type
     const rowsPerPump = tmpl.length;
 
-    pumps.forEach((p, pIdx) => {
+    // Filtra le pompe se l'opzione skipEmptyDescription è attiva
+    const pumpsToProcess = skipEmptyDescription 
+      ? pumps.filter(p => {
+          const desc = (p.descrizione || p.description || '').toString().trim();
+          return desc.length > 0;
+        })
+      : pumps;
+
+    pumpsToProcess.forEach((p, pIdx) => {
       const pumpName = (p.nome || p.name || '').toString();
       const baseRaw = p.indirizzo || p.address || '';
+      const pumpDesc = (p.descrizione || p.description || '').toString().trim();
 
       for (let i = 0; i < rowsPerPump; i++) {
         const tmeta = tmpl[i] || {};
@@ -511,13 +654,19 @@ const PumpStructureGenerator = () => {
         // calcola address usando la sequenza definita (addressFromSequence)
         const addr = addressFromSequence(baseRaw, seqKey, i) || computeAddress(baseRaw, i, 0);
 
+        // Aggiungi [Descrizione] all'inizio del commento se presente e se l'opzione è abilitata
+        let commentText = tmeta.comment || '';
+        if (useDescription && pumpDesc && pumpDesc.length > 0) {
+          commentText = `[${pumpDesc}] ${commentText}`;
+        }
+
         const flatItem = {
           name: tagName,
           type: tmeta.type || '',
           addressRaw: addr,
           address: formatAddress(addr, dbNumber, tmeta.type || ''),
           access: tmeta.access || '',
-          comment: tmeta.comment || '',
+          comment: commentText,
           stato: '',
         };
 
@@ -557,7 +706,7 @@ const PumpStructureGenerator = () => {
       }
 
       // separazione tra pompe (3 righe vuote)
-      if (pIdx < pumps.length - 1) {
+      if (pIdx < pumpsToProcess.length - 1) {
         aoa.push(new Array(headers.length).fill(''));
         aoa.push(new Array(headers.length).fill(''));
         aoa.push(new Array(headers.length).fill(''));
@@ -850,7 +999,35 @@ const PumpStructureGenerator = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
+    <div 
+      className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6"
+      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setDropActive(true); }}
+      onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setDropActive(true); }}
+      onDragLeave={(e) => { 
+        e.preventDefault(); 
+        e.stopPropagation(); 
+        // Solo chiudi se stiamo uscendo dal container principale
+        if (e.target === e.currentTarget) {
+          setDropActive(false); 
+        }
+      }}
+      onDrop={(e) => { 
+        e.preventDefault(); 
+        e.stopPropagation(); 
+        setDropActive(false); 
+        const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; 
+        if (f) readImportedFile(f); 
+      }}
+    >
+      {dropActive && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-green-400 bg-opacity-90 pointer-events-none">
+          <div className="text-center">
+            <div className="text-6xl mb-4">📁</div>
+            <div className="text-3xl font-bold text-white">Rilascia il file qui!</div>
+            <div className="text-xl text-white mt-2">File Excel (.xlsx, .xls), .ods o CSV</div>
+          </div>
+        </div>
+      )}
       <div className="max-w-7xl mx-auto">
         {globalMessage && (
           <div className={
@@ -900,7 +1077,7 @@ const PumpStructureGenerator = () => {
                   <select 
                     value={componentType} 
                     onChange={(e) => setComponentType(e.target.value)} 
-                    className="w-full p-2 border rounded"
+                    className="w-full p-2 border rounded smooth-select"
                   >
                     <option value="pump">Pompa</option>
                     <option value="valve">Valvola</option>
@@ -918,24 +1095,60 @@ const PumpStructureGenerator = () => {
                     className="w-full p-2 border rounded"
                   />
                 </div>
-                <div className="mt-2">
-                  <label className="block text-sm font-medium mb-1">Separatore decimale indirizzi</label>
-                  <div className="flex gap-2 items-center">
-                    <label className="text-sm"><input type="radio" name="addrSep" value="," checked={addrDecimalSep === ','} onChange={() => setAddrDecimalSep(',')} /> Virgola (,)</label>
-                    <label className="text-sm"><input type="radio" name="addrSep" value="." checked={addrDecimalSep === '.'} onChange={() => setAddrDecimalSep('.')} /> Punto (.)</label>
+
+                <details
+                  className="mt-3 p-2 border-2 rounded bg-white settings-dropdown"
+                  onMouseEnter={(e) => e.currentTarget.setAttribute('open', '')}
+                  onMouseLeave={(e) => e.currentTarget.removeAttribute('open')}
+                >
+                  <summary className="text-sm font-semibold cursor-pointer">⚙️ Impostazioni Generatore</summary>
+
+                  <div className="space-y-2 mt-2 settings-content">
+                    <div className="text-sm">
+                      <label className="block mb-1">Separatore decimale</label>
+                      <div className="flex gap-3">
+                        <label className="flex items-center gap-1">
+                          <input type="radio" name="addrSep" value="," checked={addrDecimalSep === ','} onChange={() => setAddrDecimalSep(',')} className="w-4 h-4" />
+                          Virgola (,)
+                        </label>
+                        <label className="flex items-center gap-1">
+                          <input type="radio" name="addrSep" value="." checked={addrDecimalSep === '.'} onChange={() => setAddrDecimalSep('.')} className="w-4 h-4" />
+                          Punto (.)
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="text-sm">
+                      <label className="flex items-center gap-2">
+                        <input type="checkbox" checked={useDescription} onChange={(e) => setUseDescription(e.target.checked)} className="w-4 h-4" />
+                        <span>Aggiungi descrizione (colonna C)</span>
+                      </label>
+                    </div>
+
+                    <div className="text-sm">
+                      <label className="flex items-center gap-2">
+                        <input type="checkbox" checked={skipEmptyDescription} onChange={(e) => setSkipEmptyDescription(e.target.checked)} className="w-4 h-4" />
+                        <span>Escludi strutture senza descrizione</span>
+                      </label>
+                    </div>
                   </div>
-                </div>
+                </details>
 
                 <div className="space-y-2">
                   <label className="block text-sm font-medium">Importa Dati Componenti</label>
+                  <div className="bg-blue-50 border border-blue-200 rounded p-3 text-xs mb-2">
+                    <div className="font-semibold mb-1">📋 Formato file richiesto:</div>
+                    <ul className="list-disc list-inside space-y-1 text-gray-700">
+                      <li><strong>Colonna A:</strong> Nome (es. POMPA1, Valvola_A, Analogica1)</li>
+                      <li><strong>Colonna B:</strong> Indirizzo iniziale (es. 3118, 3118.0 o 3118,0)</li>
+                      <li><strong>Colonna C:</strong> Descrizione (es. Compressore1) - aggiunta ai commenti come [Compressore1]</li>
+                    </ul>
+                  </div>
                   <div className="flex flex-col gap-2">
                     <div
                       id="dropZone"
-                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setDropActive(true); }}
-                      onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setDropActive(true); }}
-                      onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDropActive(false); }}
-                      onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setDropActive(false); const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) readImportedFile(f); }}
-                      className={`w-full p-4 rounded flex flex-col items-center justify-center text-sm ${dropActive ? 'border-2 border-green-400 bg-green-50' : 'border-2 border-dashed border-gray-300 bg-white'}`}>
+                      className="w-full p-4 rounded flex flex-col items-center justify-center text-sm border-2 border-dashed border-gray-300 bg-white"
+                    >
                       <div className="dz-inner flex items-center gap-3">
                         <span className="dz-icon">{renderIcon('cloud')}</span>
                         <div className="text-gray-600 dz-text">Trascina qui il file Excel (.xlsx, .xls), .ods o CSV oppure clicca il pulsante <strong>Importa Excel</strong></div>
@@ -982,7 +1195,7 @@ const PumpStructureGenerator = () => {
                         onChange={(e) => setHasInverter(e.target.checked)} 
                         className="w-4 h-4" 
                       />
-                      <label htmlFor="hasInverter">Dotato di Inverter</label>
+                      <label htmlFor="hasInverter">Pompe con Inverter</label>
                     </div>
                   </div>
                 )}
